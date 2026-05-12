@@ -14,14 +14,14 @@ service cloud.firestore {
     function existing() { return resource.data; }
 
     function isValidUser(data) {
-      return data.keys().hasAll(["name", "email", "school", "verified", "reputation", "isAdmin", "createdAt", "updatedAt", "verificationStatus"])
+      return data.keys().hasAll(["name", "email", "school", "verified", "createdAt", "updatedAt"])
         && data.name is string && data.name.size() > 0 && data.name.size() <= 100
         && data.email is string && data.email.size() > 0 && data.email.size() <= 150
         && data.school is string && data.school.size() > 0 && data.school.size() <= 100
         && data.verified is bool
-        && data.reputation is number
-        && data.isAdmin is bool
-        && data.verificationStatus in ['pending', 'approved', 'rejected']
+        && (!data.keys().hasAny(['reputation']) || data.reputation is number)
+        && (!data.keys().hasAny(['isAdmin']) || data.isAdmin is bool)
+        && (!data.keys().hasAny(['verificationStatus']) || data.verificationStatus in ['pending', 'approved', 'rejected'])
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         // Cloudinary URLs can be long — allow up to 2000 chars
@@ -51,7 +51,7 @@ service cloud.firestore {
         (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'school', 'profilePicture', 'about', 'idCardUrl', 'selfieUrl', 'verificationStatus', 'updatedAt']) 
           && request.auth.uid == userId
           && isValidUser(incoming())
-          && (incoming().verificationStatus == existing().verificationStatus || (existing().verificationStatus == 'rejected' && incoming().verificationStatus == 'pending'))
+          && (incoming().get('verificationStatus', 'approved') == existing().get('verificationStatus', 'approved') || (existing().get('verificationStatus', 'approved') == 'rejected' && incoming().get('verificationStatus', 'approved') == 'pending'))
           && incoming().updatedAt == request.time)
         ||
         (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['verified', 'reputation', 'isAdmin', 'verificationStatus', 'updatedAt'])
