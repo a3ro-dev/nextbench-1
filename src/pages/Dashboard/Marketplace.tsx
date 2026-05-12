@@ -166,7 +166,7 @@ export default function Marketplace() {
     <div className="pt-32 pb-20 px-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-8">
         <div>
-          <h1 className="text-5xl font-serif font-bold text-luxury-ink mb-4 italic">NextBench <span className="not-italic">Selection</span></h1>
+          <h1 className="text-5xl font-serif font-bold text-luxury-ink mb-4 italic">Nextbench <span className="not-italic">Selection</span></h1>
           <p className="text-luxury-ink/50 font-medium">Curated student-to-student marketplace.</p>
         </div>
         

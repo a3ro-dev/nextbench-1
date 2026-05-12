@@ -47,10 +47,7 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 bg-brand-teal rounded-full transition-transform group-hover:scale-110" />
-          <span className="text-2xl font-bold tracking-tight text-brand-teal">
-            NextBench
-          </span>
+          <img src="/logo.png" alt="Nextbench Logo" className="h-8 w-auto transition-transform group-hover:scale-105" />
         </Link>
 
         {/* Desktop Links */}

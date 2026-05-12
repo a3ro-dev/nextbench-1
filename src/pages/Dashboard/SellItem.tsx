@@ -103,7 +103,7 @@ export default function SellItem() {
         <div className="space-y-10">
           <div>
             <h1 className="text-5xl font-serif font-bold text-luxury-ink mb-4 italic">List Your <span className="not-italic">Asset.</span></h1>
-            <p className="text-luxury-ink/50 font-medium">Create a premium listing for the NextBench community.</p>
+            <p className="text-luxury-ink/50 font-medium">Create a premium listing for the Nextbench community.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8">
