@@ -265,18 +265,18 @@ export default function ChatRoom() {
             type="button" 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="p-3.5 rounded-xl border border-luxury-ink/5 text-luxury-ink/20 hover:text-brand-pink transition-all shrink-0 disabled:opacity-50"
+            className="p-3.5 rounded-xl border border-luxury-ink/10 bg-surface-soft text-brand-teal hover:bg-brand-teal/10 hover:border-brand-teal/30 transition-all shrink-0 disabled:opacity-50"
             title="Send Image"
           >
             {isUploading ? (
-              <div className="w-5 h-5 border-2 border-brand-pink border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Camera size={20} />
+              <Camera size={20} className="fill-brand-teal/10" />
             )}
           </button>
           
           <button type="button" onClick={() => setShowQuickReplies(!showQuickReplies)}
-            className={`p-3.5 rounded-xl border transition-all shrink-0 ${showQuickReplies ? 'bg-brand-teal text-white border-brand-teal' : 'border-luxury-ink/5 text-luxury-ink/20 hover:text-brand-teal'}`}
+            className={`p-3.5 rounded-xl border transition-all shrink-0 ${showQuickReplies ? 'bg-brand-teal text-white border-brand-teal' : 'bg-surface-soft border-luxury-ink/10 text-brand-teal hover:bg-brand-teal/10 hover:border-brand-teal/30'}`}
             title="Quick replies">
             ⚡
           </button>
