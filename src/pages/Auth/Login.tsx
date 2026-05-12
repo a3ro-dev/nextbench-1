@@ -1,20 +1,33 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../../lib/firebase';
 import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../../lib/AuthContext';
 
 export default function Login() {
   const [error, setError] = useState('');
-  const [notFound, setNotFound] = useState(false); // true when account doesn't exist
+  const [notFound, setNotFound] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const redirectedRef = useRef(false);
+
+  // Redirect already-authenticated users (previous session only — not during active sign-in)
+  useEffect(() => {
+    if (!loading && user && !isSigningIn && !redirectedRef.current) {
+      redirectedRef.current = true;
+      navigate('/marketplace', { replace: true });
+    }
+  }, [loading, user, isSigningIn, navigate]);
 
   const handleGoogleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setNotFound(false);
+    setIsSigningIn(true); // Prevent AuthContext redirect from firing mid-flow
 
     const provider = new GoogleAuthProvider();
 
@@ -30,33 +43,33 @@ export default function Login() {
         throw popupErr;
       }
 
-      // Check if user exists in database
+      // Check if this Google account has a registered Nextbench profile
       const docRef = doc(db, 'users', result.user.uid);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
-        // Sign them back out — they're not registered
+        // No account — sign them out and tell them to sign up
         await signOut(auth);
         setNotFound(true);
+        setIsSigningIn(false);
         return;
       }
 
       const data = docSnap.data();
-      if (data.verificationStatus === 'rejected') {
-        navigate('/verification?rejected=true');
-        return;
-      }
 
       if (data.verified) {
-        navigate('/marketplace');
+        navigate('/marketplace', { replace: true });
       } else {
-        navigate('/verification');
+        navigate('/verification', { replace: true });
       }
     } catch (err: any) {
       console.error('Login Error:', err);
-      setError(err.message || 'Failed to authenticate');
+      setError(err.message || 'Failed to authenticate. Please try again.');
+      setIsSigningIn(false);
     }
   };
+
+  if (loading) return null;
 
   return (
     <div className="min-h-screen bg-surface-base flex items-center justify-center px-6 pt-20 pb-10">
@@ -88,7 +101,7 @@ export default function Login() {
           </motion.div>
         )}
 
-        {/* "Account not found" — guide them to sign up */}
+        {/* "Account not found" card — guides unregistered users to sign up */}
         <AnimatePresence>
           {notFound && (
             <motion.div
@@ -102,7 +115,8 @@ export default function Login() {
               </div>
               <h3 className="text-sm font-bold text-luxury-ink mb-2">No account found</h3>
               <p className="text-xs text-luxury-ink/50 leading-relaxed mb-5">
-                It looks like you haven't signed up yet. Create your verified student account to access the marketplace.
+                This Google account isn't registered on Nextbench yet.
+                Create your verified student account to get started.
               </p>
               <Link
                 to="/signup"
@@ -117,10 +131,11 @@ export default function Login() {
         <form onSubmit={handleGoogleLogin} className="space-y-6">
           <button
             type="submit"
-            className="w-full bg-luxury-ink text-white py-5 rounded-sm font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-luxury-ink/10 hover:bg-brand-teal transition-all active:scale-[0.98] flex items-center justify-center gap-3 group"
+            disabled={isSigningIn}
+            className="w-full bg-luxury-ink text-white py-5 rounded-sm font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-luxury-ink/10 hover:bg-brand-teal transition-all active:scale-[0.98] flex items-center justify-center gap-3 group disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <ShieldCheck size={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-            Authenticate Identity with Google
+            {isSigningIn ? 'Verifying...' : 'Authenticate Identity with Google'}
           </button>
         </form>
 

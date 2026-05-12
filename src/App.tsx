@@ -19,14 +19,6 @@ import PrivacyPage from './pages/Legal/PrivacyPage';
 import ProtectedRoute from './components/ui/ProtectedRoute';
 import { useAuth } from './lib/AuthContext';
 
-/** Redirects already-authenticated users away from auth pages */
-function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (user) return <Navigate to="/marketplace" replace />;
-  return <>{children}</>;
-}
-
 /** Redirects logged-in-but-unverified users to /verification, and not-logged-in to /signup */
 function VerificationGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -49,9 +41,9 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/dashboard" element={<Marketplace />} />
 
-          {/* Auth pages — redirect logged-in users to marketplace */}
-          <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
-          <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
+          {/* Auth pages — redirect logged-in users internally */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
           {/* Verification — only for logged-in users; not-logged-in → /signup */}
           <Route path="/verification" element={<VerificationGuard><Verification /></VerificationGuard>} />

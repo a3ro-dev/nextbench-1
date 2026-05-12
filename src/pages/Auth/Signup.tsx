@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Mail, Lock, Building, ArrowRight, ShieldCheck, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../../lib/firebase';
 import { signInWithPopup, signInWithRedirect, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../../lib/AuthContext';
 
 const SCHOOLS = [
   "Loreto Convent",
@@ -127,18 +128,34 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const redirectedRef = useRef(false);
+
+  // Redirect already-authenticated users (only on initial load, not during active sign-in)
+  useEffect(() => {
+    if (!loading && user && !isSigningIn && !redirectedRef.current) {
+      redirectedRef.current = true;
+      navigate('/marketplace', { replace: true });
+    }
+  }, [loading, user, isSigningIn, navigate]);
+
+  if (loading) return null;
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsSigningIn(true);
 
     if (!school) {
       setError('Please select your school.');
+      setIsSigningIn(false);
       return;
     }
     if (!agreedToTerms) {
       setError('Please agree to the Terms of Service and Privacy Policy.');
+      setIsSigningIn(false);
       return;
     }
 
@@ -193,6 +210,7 @@ export default function Signup() {
     } catch (err: any) {
       console.error("Signup Error Details:", err);
       setError(err.message || 'Failed to authenticate');
+      setIsSigningIn(false);
     }
   };
 
