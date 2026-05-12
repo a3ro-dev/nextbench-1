@@ -112,8 +112,9 @@ export default function Profile() {
         updatedAt: serverTimestamp()
       });
       showToast('Profile picture updated!', 'success');
-    } catch (err) {
-      showToast('Failed to upload picture', 'error');
+    } catch (err: any) {
+      console.error("Profile picture upload error:", err);
+      showToast(`Upload failed: ${err.message || 'Unknown error'}`, 'error');
     } finally {
       setIsUploadingPic(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
