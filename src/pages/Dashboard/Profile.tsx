@@ -106,14 +106,17 @@ export default function Profile() {
     
     setIsUploadingPic(true);
     try {
+      await user.getIdToken(true); // Force refresh token
+      
       const imageUrl = await uploadProfilePicture(file, user.uid);
       await updateDoc(doc(db, 'users', user.uid), {
         profilePicture: imageUrl,
         updatedAt: serverTimestamp()
       });
       showToast('Profile picture updated!', 'success');
-    } catch (err) {
-      showToast('Failed to upload picture', 'error');
+    } catch (err: any) {
+      console.error("Profile picture upload error:", err);
+      showToast(`Upload failed: ${err.message || 'Unknown error'}`, 'error');
     } finally {
       setIsUploadingPic(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
