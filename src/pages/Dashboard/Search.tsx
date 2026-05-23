@@ -24,14 +24,52 @@ export default function Search() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Cache for suggestions to avoid re-fetching on empty search
+  const [suggestionsFetched, setSuggestionsFetched] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [suggestedPosts, setSuggestedPosts] = useState<any[]>([]);
+  const [suggestedProducts, setSuggestedProducts] = useState<any[]>([]);
+
   // Fetch initial data or perform search
   useEffect(() => {
-    // Don't fetch anything until the user types
+    // Show suggestions when search is empty
     if (!searchQuery.trim()) {
-      setUsers([]);
-      setPosts([]);
-      setProducts([]);
-      setLoading(false);
+      if (!suggestionsFetched) {
+        // Fetch suggestions only once
+        const fetchSuggestions = async () => {
+          setLoading(true);
+          try {
+            const [usersSnap, postsSnap, productsSnap] = await Promise.all([
+              getDocs(query(collection(db, 'users'), limit(5))),
+              getDocs(query(collection(db, 'posts'), limit(5))),
+              getDocs(query(collection(db, 'products'), limit(5)))
+            ]);
+            
+            const fetchedUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            const fetchedPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            const fetchedProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter((p: any) => p.status !== 'sold');
+            
+            setSuggestedUsers(fetchedUsers);
+            setSuggestedPosts(fetchedPosts);
+            setSuggestedProducts(fetchedProducts);
+            setUsers(fetchedUsers);
+            setPosts(fetchedPosts);
+            setProducts(fetchedProducts);
+            setSuggestionsFetched(true);
+          } catch (err) {
+            console.error('Failed to load suggestions:', err);
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchSuggestions();
+      } else {
+        // Just restore from cache
+        setUsers(suggestedUsers);
+        setPosts(suggestedPosts);
+        setProducts(suggestedProducts);
+        setLoading(false);
+      }
       if (activeTab === 'users') setActiveTab('all');
       return;
     }
@@ -95,7 +133,7 @@ export default function Search() {
     }, 400); // 400ms debounce (slightly longer to reduce rapid-fire queries)
 
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery]);
+  }, [searchQuery, suggestionsFetched, suggestedUsers, suggestedPosts, suggestedProducts]);
 
   const toggleFollow = async (e: React.MouseEvent, targetId: string) => {
     e.preventDefault();
