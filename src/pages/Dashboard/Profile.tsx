@@ -3,7 +3,7 @@ import { ShieldCheck, Star, Package, Settings, MapPin, X, Smartphone, ExternalLi
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { handleFirestoreError, OperationType } from '../../lib/firestore-errors';
 import { useToast } from '../../lib/ToastContext';
@@ -224,6 +224,33 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
       await deleteDoc(doc(db, 'products', productId));
       showToast('Listing deleted', 'info');
     } catch (err) { handleFirestoreError(err, OperationType.DELETE, `products/${productId}`); }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm('Are you sure you want to delete this post? This will also delete all comments and likes.')) return;
+    try {
+      const batch = writeBatch(db);
+      
+      const repliesQ = query(collection(db, 'post_replies'), where('postId', '==', postId));
+      const repliesSnap = await getDocs(repliesQ);
+      repliesSnap.forEach(docSnap => batch.delete(docSnap.ref));
+      
+      const upvotesQ = query(collection(db, 'post_upvotes'), where('postId', '==', postId));
+      const upvotesSnap = await getDocs(upvotesQ);
+      upvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
+
+      const reactionsQ = query(collection(db, 'post_reactions'), where('postId', '==', postId));
+      const reactionsSnap = await getDocs(reactionsQ);
+      reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
+      
+      batch.delete(doc(db, 'posts', postId));
+      
+      await batch.commit();
+      
+      showToast('Post deleted successfully', 'success');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, 'posts');
+    }
   };
 
   // ─── Follow Handlers ───────────────────────────────────
@@ -692,6 +719,14 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
                     <span className="flex items-center gap-2"><Heart size={24} /> {post.upvotesCount || 0}</span>
                     <span className="flex items-center gap-2"><MessageSquare size={24} /> {post.repliesCount || 0}</span>
                   </div>
+                  {(userData?.role === 'admin' || post.authorId === user?.uid) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id); }}
+                      className="ml-auto p-2 hover:bg-red-500/10 hover:text-red-500 rounded-full text-luxury-ink/40 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

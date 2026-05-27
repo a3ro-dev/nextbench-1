@@ -72,7 +72,11 @@ export default function ChatList() {
         if (uncachedUserIds.size > 0) {
           const fetchPromises = Array.from(uncachedUserIds).map(async (userId) => {
             const uDoc = await getDoc(doc(db, 'users', userId));
-            userCache[userId] = uDoc.data();
+            if (uDoc.exists()) {
+              userCache[userId] = { id: userId, ...uDoc.data() };
+            } else {
+              userCache[userId] = { id: userId, name: 'Deleted User' };
+            }
           });
           await Promise.all(fetchPromises);
         }

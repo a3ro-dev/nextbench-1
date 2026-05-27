@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Moon, Sun, ShieldAlert, Edit2, LogOut, Loader2, LifeBuoy } from 'lucide-react';
-import { collection, query, where, getDocs, deleteDoc, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, getDoc, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { useToast } from '../../lib/ToastContext';
 import { claimUsername, validateUsername } from '../../lib/usernames';
+import { PERSONA_NAMES } from '../../lib/confessions';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface ProfileSettingsProps {
@@ -28,6 +29,10 @@ export default function ProfileSettings({ isOpen, onClose }: ProfileSettingsProp
   const [newUsername, setNewUsername] = useState('');
   const [isChangingUsername, setIsChangingUsername] = useState(false);
 
+  // Persona state
+  const [personaName, setPersonaName] = useState('');
+  const [isChangingPersona, setIsChangingPersona] = useState(false);
+
   // Support states
   const [supportReason, setSupportReason] = useState('');
   const [supportDetails, setSupportDetails] = useState('');
@@ -38,6 +43,12 @@ export default function ProfileSettings({ isOpen, onClose }: ProfileSettingsProp
       loadBlockedUsers();
     }
   }, [isOpen, activeTab, user]);
+
+  useEffect(() => {
+    if (isOpen && userData?.anonymousPersonaName) {
+      setPersonaName(userData.anonymousPersonaName);
+    }
+  }, [isOpen, userData]);
 
   const loadBlockedUsers = async () => {
     if (!user) return;
@@ -95,6 +106,29 @@ export default function ProfileSettings({ isOpen, onClose }: ProfileSettingsProp
       showToast(err.message || 'Failed to update username', 'error');
     } finally {
       setIsChangingUsername(false);
+    }
+  };
+
+  const handleSavePersona = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!personaName) {
+      showToast('Please select a persona', 'error');
+      return;
+    }
+    
+    setIsChangingPersona(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        anonymousPersonaName: personaName,
+        updatedAt: serverTimestamp()
+      });
+      showToast('Anonymous persona updated!', 'success');
+    } catch (err: any) {
+      console.error("PERSONA UPDATE ERROR:", err);
+      showToast(`Failed to update persona: ${err.message}`, 'error');
+    } finally {
+      setIsChangingPersona(false);
     }
   };
 
@@ -276,6 +310,33 @@ export default function ProfileSettings({ isOpen, onClose }: ProfileSettingsProp
                           className="px-4 py-2 bg-brand-teal text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
                         >
                           {isChangingUsername ? 'Saving...' : 'Update'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-purple-700 mb-4 uppercase tracking-widest">Anonymous Persona</h3>
+                    
+                    <div className="p-4 rounded-xl bg-purple-500/5 border mb-4" style={{ borderColor: 'var(--color-border)' }}>
+                      <p className="text-xs text-purple-700/70 mb-4">
+                        Set up your secret identity. You can use this persona to post confessions anonymously.
+                      </p>
+                      
+                      <form onSubmit={handleSavePersona} className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          value={personaName}
+                          onChange={(e) => setPersonaName(e.target.value)}
+                          placeholder="Enter your secret identity (e.g. Midnight Thinker)"
+                          className="flex-1 bg-white/50 border border-purple-500/20 rounded-lg py-2 px-4 text-sm font-medium focus:outline-none focus:border-purple-500 transition-all text-purple-900"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isChangingPersona || !personaName.trim()}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                        >
+                          {isChangingPersona ? 'Saving...' : 'Save Persona'}
                         </button>
                       </form>
                     </div>

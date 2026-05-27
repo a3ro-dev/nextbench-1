@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Send, ArrowLeft, MoreVertical, ShieldCheck, User, Package, Phone, Flag, Camera, X, Image as ImageIcon, CornerDownRight, Pin, CheckCircle2, Circle, Copy, Trash2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { db } from '../../lib/firebase';
@@ -58,6 +58,8 @@ export default function ChatRoom() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [deleteConfirmMsgId, setDeleteConfirmMsgId] = useState<string | null>(null);
+  const [deleteEveryoneConfirmMsgId, setDeleteEveryoneConfirmMsgId] = useState<string | null>(null);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -259,6 +261,7 @@ export default function ChatRoom() {
     } catch (err) {
       showToast('Failed to delete message', 'error');
     }
+    setDeleteConfirmMsgId(null);
     setSelectedMessageId(null);
   };
 
@@ -273,6 +276,7 @@ export default function ChatRoom() {
     } catch (err) {
       showToast('Failed to delete message', 'error');
     }
+    setDeleteEveryoneConfirmMsgId(null);
     setSelectedMessageId(null);
   };
 
@@ -392,7 +396,7 @@ export default function ChatRoom() {
             <ArrowLeft size={20} className="text-luxury-ink" />
           </button>
           <div className="flex items-center gap-3 p-2 -ml-2 rounded-xl transition-colors">
-            <Link to={`/profile/${otherUser.id}`} className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center overflow-hidden border border-luxury-ink/5 shrink-0 hover:opacity-80 transition-opacity">
+            <Link to={`/profile/${otherUser.id || roomData?.participants?.find(id => id !== user.uid) || ''}`} className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center overflow-hidden border border-luxury-ink/5 shrink-0 hover:opacity-80 transition-opacity">
               {otherUser.profilePicture ? (
                 <img src={getOptimizedImageUrl(otherUser.profilePicture)} alt={otherUser.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
@@ -400,7 +404,7 @@ export default function ChatRoom() {
               )}
             </Link>
             <div>
-              <Link to={`/profile/${otherUser.id}`} className="font-bold text-luxury-ink flex items-center gap-1.5 leading-none mb-0.5 text-sm hover:text-brand-teal transition-colors">
+              <Link to={`/profile/${otherUser.id || roomData?.participants?.find(id => id !== user.uid) || ''}`} className="font-bold text-luxury-ink flex items-center gap-1.5 leading-none mb-0.5 text-sm hover:text-brand-teal transition-colors">
                 {otherUser.name}
                 {otherUser.verified && <ShieldCheck size={14} className="text-brand-teal" />}
               </Link>
@@ -552,14 +556,14 @@ export default function ChatRoom() {
                       <CheckCircle2 size={16} className="opacity-60" /> Select
                     </button>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteForMe(msg.id); }}
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmMsgId(msg.id); }}
                       className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5"
                     >
                       <X size={16} className="opacity-60" /> Delete for me
                     </button>
                     {isMe && !isDeleted && (
                       <button 
-                        onClick={(e) => { e.stopPropagation(); handleDeleteForEveryone(msg.id); }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteEveryoneConfirmMsgId(msg.id); }}
                         className="px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-red-50 transition-colors border-t border-luxury-ink/5 flex items-center gap-2"
                       >
                         <Flag size={16} /> Delete for everyone
@@ -680,6 +684,84 @@ export default function ChatRoom() {
         </div>
         )}
       </div>
+
+      {/* Delete For Me Modal */}
+      <AnimatePresence>
+        {deleteConfirmMsgId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            onClick={() => setDeleteConfirmMsgId(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="theme-card w-full max-w-sm rounded-3xl p-6 shadow-2xl border" style={{ borderColor: 'var(--color-border)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold text-luxury-ink mb-2">Delete Message</h3>
+              <p className="text-luxury-ink/60 text-sm mb-6">Are you sure you want to delete this message for yourself? Other chat members will still be able to see it.</p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDeleteConfirmMsgId(null)}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-luxury-ink/60 hover:bg-surface-soft transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteForMe(deleteConfirmMsgId)}
+                  className="px-5 py-2.5 bg-red-500 text-white rounded-full text-sm font-bold hover:bg-red-600 transition-colors shadow-lg"
+                >
+                  Delete for me
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete For Everyone Modal */}
+      <AnimatePresence>
+        {deleteEveryoneConfirmMsgId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            onClick={() => setDeleteEveryoneConfirmMsgId(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="theme-card w-full max-w-sm rounded-3xl p-6 shadow-2xl border" style={{ borderColor: 'var(--color-border)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold text-red-500 mb-2">Delete for Everyone</h3>
+              <p className="text-luxury-ink/60 text-sm mb-6">This message will be permanently deleted for all members in this chat. They will see that a message was deleted.</p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDeleteEveryoneConfirmMsgId(null)}
+                  className="px-5 py-2.5 rounded-full text-sm font-bold text-luxury-ink/60 hover:bg-surface-soft transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteForEveryone(deleteEveryoneConfirmMsgId)}
+                  className="px-5 py-2.5 bg-red-500 text-white rounded-full text-sm font-bold hover:bg-red-600 transition-colors shadow-lg"
+                >
+                  Delete for everyone
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ReportModal
         isOpen={showReport}
