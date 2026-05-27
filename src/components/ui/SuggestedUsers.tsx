@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { UserCheck, UserPlus } from 'lucide-react';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { useToast } from '../../lib/ToastContext';
+import TrendingSidebar from './TrendingSidebar';
 
 interface SuggestedUser {
   id: string;
@@ -160,6 +161,11 @@ export default function SuggestedUsers() {
           })
         )}
         </div>
+      </div>
+
+      {/* Trending Section */}
+      <div className="bg-surface-soft/50 rounded-2xl p-6 border border-luxury-ink/5 mt-6">
+        <TrendingSidebar />
       </div>
       
       <div className="mt-8 flex flex-wrap gap-x-3 gap-y-2 px-2">

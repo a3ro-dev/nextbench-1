@@ -13,7 +13,7 @@ import { getOptimizedImageUrl } from '../../lib/utils';
 interface PendingUser { id: string; name: string; school: string; email: string; verified: boolean; isAdmin: boolean; reputation: number; idCardUrl?: string; selfieUrl?: string; }
 interface PendingProduct { id: string; title: string; category: string; price: number; sellerName: string; sellerId: string; image: string; description: string; }
 interface SchoolRequest { id: string; schoolName: string; city: string; website: string; requesterName: string; requesterEmail: string; idCardUrl: string; status: string; }
-interface PendingPost { id: string; title: string; content: string; type: string; school: string; authorName: string; status: string; city?: string; }
+interface PendingPost { id: string; title: string; content: string; type: string; school: string; authorName: string; status: string; city?: string; isAnonymous?: boolean; personaName?: string; }
 interface Report { id: string; reporterId: string; contentType: string; contentId: string; reason: string; details: string; status: string; createdAt: any; }
 
 export default function AdminPanel() {
@@ -441,11 +441,17 @@ export default function AdminPanel() {
               <div className="flex w-full items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 bg-brand-teal/10 rounded-full text-[10px] font-bold uppercase tracking-widest text-brand-teal">{item.type}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${item.type === 'confession' ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>{item.type}</span>
                     <h3 className="text-base font-bold text-luxury-ink">{item.title}</h3>
                   </div>
-                  <p className="text-xs font-medium text-luxury-ink/40">
-                    By {item.authorName} • {item.school} {item.city ? `• ${item.city}` : ''}
+                  <p className="text-xs font-medium text-luxury-ink/40 flex flex-wrap items-center gap-1.5 mt-1">
+                    By {item.authorName} 
+                    {item.isAnonymous && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-luxury-ink/5 rounded-md text-[9px] font-bold text-luxury-ink/60">
+                        🔓 Posted as {item.personaName}
+                      </span>
+                    )}
+                    • {item.school} {item.city ? `• ${item.city}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

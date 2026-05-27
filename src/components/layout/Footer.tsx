@@ -27,8 +27,7 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full border border-brand-teal/20 flex items-center justify-center opacity-50 text-[10px] font-bold uppercase">ig</div>
-            <div className="w-8 h-8 rounded-full border border-brand-teal/20 flex items-center justify-center opacity-50 text-[10px] font-bold uppercase">ln</div>
+            <a href="https://www.instagram.com/nextbench_/" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full border border-brand-teal/20 flex items-center justify-center opacity-50 text-[10px] font-bold uppercase hover:opacity-100 hover:border-brand-pink hover:text-brand-pink transition-all">ig</a>
           </div>
         </div>
 

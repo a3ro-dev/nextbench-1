@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark } from 'lucide-react';
-import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
 import { useToast } from '../../lib/ToastContext';
@@ -16,12 +16,18 @@ import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
 import { useScrollLock } from '../../hooks/useScrollLock';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
+import { getPersonaDisplay } from '../../lib/confessions';
+import { togglePostReaction, getUserReaction, REACTION_TYPES, REACTION_KEYS, ReactionType } from '../../lib/reactions';
 
 interface Post {
   id: string;
   title: string;
   content: string;
   type: string;
+  isAnonymous?: boolean;
+  personaName?: string;
+  personaEmoji?: string;
+  reactionsCount?: Record<string, number>;
   city?: string;
   school: string;
   authorId: string;
@@ -56,6 +62,7 @@ export const POST_TYPES = [
   { id: 'info', label: 'School Info' },
   { id: 'notes', label: 'Notes' },
   { id: 'event', label: 'Interschool Event' },
+  { id: 'confession', label: 'Confession' },
   { id: 'others', label: 'Others' },
 ];
 
@@ -68,6 +75,7 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
   hasUpvoted: boolean;
   onShare: (post: Post) => void;
   onDelete?: (postId: string) => void;
+  onDeleteReply?: (replyId: string) => void;
   isAdmin?: boolean;
   replies: any[];
   replyContent: string;
@@ -80,6 +88,25 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
     : (post.imageUrl ? [post.imageUrl] : []);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [userReaction, setUserReaction] = useState<ReactionType | null>(null);
+  const { user } = useAuth();
+  
+  const displayInfo = getPersonaDisplay(post, isAdmin);
+
+  useEffect(() => {
+    if (user && post.type === 'confession') {
+      getUserReaction(post.id, user.uid).then(r => setUserReaction(r));
+    }
+  }, [post.id, user, post.type]);
+
+  const handleReactionClick = async (reaction: ReactionType) => {
+    if (!user) return;
+    // Optimistic UI update could go here, but for simplicity we let the snapshot handle it usually.
+    // We will just call the toggler.
+    await togglePostReaction(post.id, user.uid, reaction);
+    const newReaction = await getUserReaction(post.id, user.uid);
+    setUserReaction(newReaction);
+  };
 
   return (
     <motion.div
@@ -138,29 +165,36 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
 
           {/* Author */}
           <div className="flex items-center gap-3 mb-5">
-            <Link to={`/profile/${post.authorId}`} onClick={onClose} className="shrink-0">
-              <div className="w-11 h-11 rounded-full bg-brand-pink/10 flex items-center justify-center text-brand-pink font-bold text-lg font-serif overflow-hidden border-2 border-white shadow-sm">
-                {post.authorProfilePicture ? (
+            <Link to={displayInfo.isAnonymous ? '#' : `/profile/${post.authorId}`} onClick={displayInfo.isAnonymous ? (e) => { e.preventDefault(); showToast(`Anonymous ID: Anon-${post.authorId.substring(0, 5).toUpperCase()}`, 'info'); } : onClose} className={`shrink-0 ${displayInfo.isAnonymous ? 'cursor-pointer' : ''}`}>
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-serif overflow-hidden border-2 border-white shadow-sm ${displayInfo.isAnonymous ? 'bg-gradient-to-br from-purple-500/20 to-blue-500/20 text-purple-600' : 'bg-brand-pink/10 text-brand-pink'}`}>
+                {!displayInfo.isAnonymous && post.authorProfilePicture ? (
                   <img src={getOptimizedImageUrl(post.authorProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : post.authorName[0]?.toUpperCase()}
+                ) : displayInfo.name[0]?.toUpperCase()}
               </div>
             </Link>
             <div className="flex-1 min-w-0">
-              <Link to={`/profile/${post.authorId}`} onClick={onClose} className="text-sm font-bold text-luxury-ink hover:text-brand-teal transition-colors">
-                {post.authorName}
+              <Link to={displayInfo.isAnonymous ? '#' : `/profile/${post.authorId}`} onClick={displayInfo.isAnonymous ? (e) => { e.preventDefault(); showToast(`Anonymous ID: Anon-${post.authorId.substring(0, 5).toUpperCase()}`, 'info'); } : onClose} className={`text-sm font-bold text-luxury-ink transition-colors ${displayInfo.isAnonymous ? 'hover:text-purple-600 cursor-pointer' : 'hover:text-brand-teal'}`}>
+                {displayInfo.name}
               </Link>
               <p className="text-[10px] font-bold uppercase tracking-widest text-luxury-ink/30 flex items-center gap-1">
-                <School size={10} /> {post.school}
-                {post.city && <><span className="mx-1">•</span><MapPin size={10} /> {post.city}</>}
+                <School size={10} /> {displayInfo.school}
+                {post.city && !displayInfo.isAnonymous && <><span className="mx-1">•</span><MapPin size={10} /> {post.city}</>}
               </p>
             </div>
-            <div className="flex gap-1.5">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-teal/10 text-brand-teal rounded-full text-[9px] font-bold uppercase tracking-widest">
-                {POST_TYPES.find(t => t.id === post.type)?.label || post.type}
-              </span>
-              {post.feedScore && post.feedScore > 10 && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 text-amber-500 rounded-full text-[9px] font-bold uppercase tracking-widest">
-                  <Flame size={10} /> Hot
+            <div className="flex gap-1.5 flex-col items-end">
+              <div className="flex gap-1.5">
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest ${post.type === 'confession' ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
+                  {POST_TYPES.find(t => t.id === post.type)?.label || post.type}
+                </span>
+                {post.feedScore && post.feedScore > 10 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 text-amber-500 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                    <Flame size={10} /> Hot
+                  </span>
+                )}
+              </div>
+              {displayInfo.isAnonymous && isAdmin && (
+                <span className="text-[9px] font-bold text-luxury-ink/40 bg-luxury-ink/5 px-2 py-0.5 rounded-full">
+                  Real: {displayInfo.realName}
                 </span>
               )}
             </div>
@@ -197,6 +231,14 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
                           <p className="text-[8px] font-bold uppercase tracking-widest text-luxury-ink/30">{reply.authorSchool}</p>
                         </div>
                       </Link>
+                      {(isAdmin || reply.authorId === user?.uid) && onDeleteReply && (
+                        <button
+                          onClick={() => onDeleteReply(reply.id)}
+                          className="ml-auto p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-full text-luxury-ink/20 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-luxury-ink/80 leading-relaxed">{reply.content}</p>
                   </div>
@@ -226,30 +268,54 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
         </div>
 
         {/* Action Bar */}
-        <div className="px-6 md:px-8 py-4 border-t border-luxury-ink/5 flex items-center justify-between bg-surface-base/50">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onUpvote(post)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${hasUpvoted ? 'bg-brand-pink/10 text-brand-pink' : 'hover:bg-surface-soft text-luxury-ink/40 hover:text-brand-pink'}`}
-            >
-              <Heart size={24} className={hasUpvoted ? 'fill-brand-pink' : ''} />
-              {post.upvotesCount || 0}
-            </button>
-            <button
-              onClick={() => document.getElementById('reply-input')?.focus()}
-              className="flex items-center gap-2 px-4 py-3 hover:bg-surface-soft rounded-2xl text-sm font-bold text-luxury-ink/40 hover:text-brand-teal transition-all"
-            >
-              <MessageSquare size={24} />
-              {post.repliesCount || 0}
-            </button>
-            <button
-              onClick={() => onShare(post)}
-              className="flex items-center gap-1.5 px-4 py-2.5 hover:bg-surface-soft rounded-xl text-xs font-bold text-luxury-ink/40 hover:text-brand-teal transition-all"
-            >
-              <Share2 size={18} />
-            </button>
-          </div>
-          {isAdmin && onDelete && (
+        <div className="px-6 md:px-8 py-4 border-t border-luxury-ink/5 flex flex-col gap-4 bg-surface-base/50">
+          
+          {post.type === 'confession' && (
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {REACTION_KEYS.map(rk => {
+                const rt = REACTION_TYPES[rk];
+                const count = post.reactionsCount?.[rk] || 0;
+                const isSelected = userReaction === rk;
+                return (
+                  <button
+                    key={rk}
+                    onClick={() => handleReactionClick(rk)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${isSelected ? 'bg-purple-500/10 border-purple-500/30 text-purple-700' : 'bg-surface-card border-luxury-ink/5 hover:border-luxury-ink/20 text-luxury-ink/60'}`}
+                  >
+                    <span>{rt.emoji}</span>
+                    <span>{count > 0 ? count : rt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              {post.type !== 'confession' && (
+                <button
+                  onClick={() => onUpvote(post)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${hasUpvoted ? 'bg-brand-pink/10 text-brand-pink' : 'hover:bg-surface-soft text-luxury-ink/40 hover:text-brand-pink'}`}
+                >
+                  <Heart size={24} className={hasUpvoted ? 'fill-brand-pink' : ''} />
+                  {post.upvotesCount || 0}
+                </button>
+              )}
+              <button
+                onClick={() => document.getElementById('reply-input')?.focus()}
+                className="flex items-center gap-2 px-4 py-3 hover:bg-surface-soft rounded-2xl text-sm font-bold text-luxury-ink/40 hover:text-brand-teal transition-all"
+              >
+                <MessageSquare size={24} />
+                {post.repliesCount || 0}
+              </button>
+              <button
+                onClick={() => onShare(post)}
+                className="flex items-center gap-1.5 px-4 py-2.5 hover:bg-surface-soft rounded-xl text-xs font-bold text-luxury-ink/40 hover:text-brand-teal transition-all"
+              >
+                <Share2 size={18} />
+              </button>
+            </div>
+            {(isAdmin || post.authorId === user?.uid) && onDelete && (
             <button
               onClick={() => onDelete(post.id)}
               className="flex items-center gap-1.5 px-4 py-2.5 hover:bg-red-500/10 hover:text-red-500 rounded-xl text-xs font-bold text-luxury-ink/20 transition-all"
@@ -257,6 +323,7 @@ function PostDetailModal({ post, onClose, onUpvote, hasUpvoted, onShare, onDelet
               <Trash2 size={16} />
             </button>
           )}
+          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -298,6 +365,10 @@ export default function Feed() {
   const [wishlistMap, setWishlistMap] = useState<Record<string, string>>({});
 
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
+  
+  // Confession state
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [selectedPostType, setSelectedPostType] = useState('info');
 
   // Firestore listener — stable subscription, no dependency on followingIds/friendIds.
   // This listener only fires when Firestore posts actually change,
@@ -532,6 +603,12 @@ export default function Feed() {
     const type = formData.get('type') as string;
     const privacy = (formData.get('privacy') as 'public' | 'private') || 'public';
 
+    if (type === 'confession' && isAnonymous && !userData?.anonymousPersonaName) {
+      showToast('You must set up an anonymous persona in Profile Settings first.', 'error');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       let imageUrls: string[] = [];
       if (imageFiles.length > 0) {
@@ -542,6 +619,9 @@ export default function Feed() {
         title,
         content,
         type,
+        isAnonymous: type === 'confession' ? isAnonymous : false,
+        personaName: (type === 'confession' && isAnonymous) ? userData.anonymousPersonaName : null,
+        reactionsCount: type === 'confession' ? {} : null,
         city: userData.city || 'Lucknow',
         school: userData.school,
         authorId: user.uid,
@@ -560,6 +640,8 @@ export default function Feed() {
       setIsModalOpen(false);
       setImageFiles([]);
       setPendingFiles([]);
+      setIsAnonymous(false);
+      setSelectedPostType('info');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'posts');
     } finally {
@@ -660,13 +742,46 @@ export default function Feed() {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    if (!window.confirm('Are you sure you want to delete this post? This will also delete all comments and likes.')) return;
     try {
-      await deleteDoc(doc(db, 'posts', postId));
+      const batch = writeBatch(db);
+      
+      const repliesQ = query(collection(db, 'post_replies'), where('postId', '==', postId));
+      const repliesSnap = await getDocs(repliesQ);
+      repliesSnap.forEach(docSnap => batch.delete(docSnap.ref));
+      
+      const upvotesQ = query(collection(db, 'post_upvotes'), where('postId', '==', postId));
+      const upvotesSnap = await getDocs(upvotesQ);
+      upvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
+
+      const reactionsQ = query(collection(db, 'post_reactions'), where('postId', '==', postId));
+      const reactionsSnap = await getDocs(reactionsQ);
+      reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
+      
+      batch.delete(doc(db, 'posts', postId));
+      
+      await batch.commit();
+      
       showToast('Post deleted successfully', 'success');
       setSelectedPost(null);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, 'posts');
+    }
+  };
+
+  const handleDeleteReply = async (replyId: string) => {
+    if (!window.confirm('Are you sure you want to delete this reply?')) return;
+    try {
+      await deleteDoc(doc(db, 'post_replies', replyId));
+      if (selectedPost) {
+        await updateDoc(doc(db, 'posts', selectedPost.id), {
+          repliesCount: Math.max(0, (selectedPost.repliesCount || 0) - 1),
+          updatedAt: serverTimestamp()
+        });
+      }
+      showToast('Reply deleted', 'success');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, 'post_replies');
     }
   };
 
@@ -842,7 +957,8 @@ export default function Feed() {
             onUpvote={handleUpvote}
             hasUpvoted={upvotedPostIds.has(selectedPost.id)}
             onShare={handleShare}
-            onDelete={userData?.role === 'admin' ? handleDeletePost : undefined}
+            onDelete={handleDeletePost}
+            onDeleteReply={handleDeleteReply}
             isAdmin={userData?.role === 'admin'}
             replies={replies}
             replyContent={replyContent}
@@ -902,6 +1018,15 @@ export default function Feed() {
                       <select
                         name="type"
                         required
+                        value={selectedPostType}
+                        onChange={(e) => {
+                          setSelectedPostType(e.target.value);
+                          if (e.target.value === 'confession') {
+                            setIsAnonymous(true);
+                          } else {
+                            setIsAnonymous(false);
+                          }
+                        }}
                         className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all appearance-none"
                       >
                         {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
@@ -919,6 +1044,42 @@ export default function Feed() {
                       </select>
                     </div>
                   </div>
+
+                  {selectedPostType === 'confession' && (
+                    <div className="bg-purple-500/5 border border-purple-500/10 rounded-2xl p-6 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-purple-700">Anonymous Mode</h4>
+                          <p className="text-[10px] uppercase tracking-widest text-purple-700/60 font-bold">Hide your real identity</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer mt-1">
+                          <input type="checkbox" className="sr-only peer" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
+                          <div className="w-11 h-6 bg-luxury-ink/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                        </label>
+                      </div>
+
+                      {isAnonymous && (
+                        <div className="space-y-4 pt-4 border-t border-purple-500/10">
+                          {userData?.anonymousPersonaName ? (
+                            <p className="text-sm font-medium text-purple-700">
+                              You will post as: <span className="font-bold">{userData.anonymousPersonaName}</span>
+                            </p>
+                          ) : (
+                            <div className="bg-white/50 border border-purple-500/20 rounded-xl p-4 text-center">
+                              <p className="text-xs text-purple-700 mb-3">You haven't set up an anonymous persona yet.</p>
+                              <Link 
+                                to={`/profile/${user?.uid}`}
+                                onClick={() => setIsModalOpen(false)}
+                                className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold transition-colors"
+                              >
+                                Set Up Persona
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Title</label>

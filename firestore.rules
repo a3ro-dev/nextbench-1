@@ -29,7 +29,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['profilePicture']) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() <= 2000)))
         && (!data.keys().hasAny(['idCardUrl']) || (data.idCardUrl == null || (data.idCardUrl is string && data.idCardUrl.size() <= 2000)))
         && (!data.keys().hasAny(['selfieUrl']) || (data.selfieUrl == null || (data.selfieUrl is string && data.selfieUrl.size() <= 2000)))
-        && (!data.keys().hasAny(['about']) || (data.about == null || (data.about is string && data.about.size() <= 600)));
+        && (!data.keys().hasAny(['about']) || (data.about == null || (data.about is string && data.about.size() <= 600)))
+        && (!data.keys().hasAny(['anonymousPersonaName']) || (data.anonymousPersonaName == null || data.anonymousPersonaName is string));
     }
 
     match /users/{userId} {
@@ -49,7 +50,12 @@ service cloud.firestore {
         && incoming().updatedAt == request.time;
         
       allow update: if isSignedIn() && isValidId(userId) && (
-        (incoming().diff(existing()).affectedKeys().hasOnly(['username', 'lastUsernameChange', 'name', 'school', 'city', 'profilePicture', 'about', 'idCardUrl', 'selfieUrl', 'verificationStatus', 'updatedAt']) 
+        (incoming().diff(existing()).affectedKeys().hasOnly(['anonymousPersonaName', 'updatedAt'])
+          && request.auth.uid == userId
+          && (!incoming().keys().hasAny(['anonymousPersonaName']) || (incoming().anonymousPersonaName == null || incoming().anonymousPersonaName is string))
+          && incoming().updatedAt == request.time)
+        ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['username', 'lastUsernameChange', 'name', 'school', 'city', 'profilePicture', 'about', 'idCardUrl', 'selfieUrl', 'verificationStatus', 'updatedAt', 'anonymousPersonaName']) 
           && request.auth.uid == userId
           && isValidUser(incoming())
           && (incoming().get('verificationStatus', 'approved') == existing().get('verificationStatus', 'approved') || (existing().get('verificationStatus', 'approved') == 'rejected' && incoming().get('verificationStatus', 'approved') == 'pending'))
@@ -244,7 +250,7 @@ service cloud.firestore {
       return data.keys().hasAll(['title', 'content', 'type', 'school', 'authorId', 'authorName', 'status', 'createdAt', 'updatedAt'])
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && data.content is string && data.content.size() > 0 && data.content.size() <= 5000
-        && data.type is string && data.type in ['info', 'notes', 'event', 'others']
+        && data.type is string && data.type in ['info', 'notes', 'event', 'others', 'confession']
         && data.school is string && data.school.size() > 0
         && data.authorId is string && data.authorId.size() > 0
         && data.authorName is string && data.authorName.size() > 0
@@ -256,7 +262,11 @@ service cloud.firestore {
         && (!data.keys().hasAny(['repliesCount']) || (data.repliesCount is number))
         && (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string))
         && (!data.keys().hasAny(['imageUrls']) || (data.imageUrls is list))
-        && (!data.keys().hasAny(['privacy']) || (data.privacy in ['public', 'private']));
+        && (!data.keys().hasAny(['privacy']) || (data.privacy in ['public', 'private']))
+        && (!data.keys().hasAny(['isAnonymous']) || (data.isAnonymous is bool))
+        && (!data.keys().hasAny(['personaName']) || (data.personaName == null || data.personaName is string))
+        && (!data.keys().hasAny(['authorProfilePicture']) || (data.authorProfilePicture == null || data.authorProfilePicture is string))
+        && (!data.keys().hasAny(['reactionsCount']) || (data.reactionsCount == null || data.reactionsCount is map));
     }
 
     match /posts/{postId} {
@@ -279,8 +289,8 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'city', 'privacy', 'updatedAt'])
           && incoming().updatedAt == request.time)
         ||
-        // Any verified user can update upvotes and replies counts
-        (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt']))
+        // Any verified user can update upvotes, replies, and reactions counts
+        (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'reactionsCount', 'updatedAt']))
         ||
         (isAdmin() && incoming().updatedAt == request.time)
       );
@@ -293,7 +303,23 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow list: if isSignedIn();
       allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().postId is string;
-      allow delete: if isVerified() && resource.data.userId == request.auth.uid;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === POST REACTIONS (CONFESSIONS) ===
+    match /post_reactions/{reactionId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() 
+        && incoming().userId == request.auth.uid 
+        && incoming().postId is string
+        && incoming().reaction is string
+        && incoming().createdAt == request.time;
+      allow update: if isVerified() 
+        && resource.data.userId == request.auth.uid 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['reaction', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
     // === POST REPLIES ===
@@ -308,7 +334,7 @@ service cloud.firestore {
         && incoming().content is string
         && incoming().content.size() > 0 && incoming().content.size() <= 1000
         && incoming().createdAt == request.time;
-      allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
     // === FOLLOWS ===
@@ -369,7 +395,7 @@ service cloud.firestore {
     }
     // === BLOCKS ===
     match /blocks/{blockId} {
-      allow read: if isSignedIn() && (resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
+      allow get: if isSignedIn() && (resource == null || resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
       allow list: if isSignedIn();
       allow create: if isVerified() 
         && incoming().blockerId == request.auth.uid
