@@ -993,84 +993,73 @@ export default function Feed() {
   }, [posts]);
 
   return (
-    <div className="pt-6 pb-20 px-0 sm:px-4 md:px-0 max-w-2xl mx-auto w-full">
+    <div className="pb-20 w-full">
       <SEO 
         title="Home" 
         description="Discover school info, notes, and interschool events on Nextbench Community." 
       />
 
       {/* Sticky Header Tabs */}
-      <div className="sticky top-0 z-40 nav-glass border-b pt-2 sm:pt-4 flex items-center justify-between px-4 sm:px-6 mb-4 sm:mb-8 gap-4" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex-1 flex items-center justify-center sm:justify-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setContentType('all')}
-            className={`py-3 sm:py-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 whitespace-nowrap shrink-0 ${contentType === 'all' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/30 hover:text-luxury-ink/60'}`}
-          >
-            All
-          </button>
+      <div className="sticky top-0 z-40 nav-glass border-b flex items-center px-4 sm:px-6 gap-1" style={{ borderColor: 'var(--color-border)' }}>
+        <button
+          onClick={() => setContentType('all')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'all' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          For you
+        </button>
+        <button
+          onClick={() => setContentType('posts')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'posts' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          Posts
+        </button>
+        <button
+          onClick={() => setContentType('marketplace')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'marketplace' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          Marketplace
+        </button>
+      </div>
 
+      {/* Compose Bar — LinkedIn style */}
+      {user && userData?.verified && (
+        <div className="border-b px-4 py-3 flex items-center gap-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
+          <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden shrink-0">
+            {userData?.profilePicture ? (
+              <img src={getOptimizedImageUrl(userData.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="text-brand-teal font-semibold text-sm">{(userData?.name || 'U')[0].toUpperCase()}</span>
+            )}
+          </div>
           <button
-            onClick={() => setContentType('marketplace')}
-            className={`py-3 sm:py-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 whitespace-nowrap shrink-0 ${contentType === 'marketplace' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/30 hover:text-luxury-ink/60'}`}
+            onClick={() => setIsModalOpen(true)}
+            className="flex-1 text-left px-4 py-2.5 rounded-full border text-sm text-luxury-ink/40 hover:bg-surface-soft transition-colors"
+            style={{ borderColor: 'var(--color-border)' }}
           >
-            Marketplace
+            What's on your mind?
           </button>
         </div>
-        
-        {user && userData?.verified && (
-          <div className="hidden sm:block shrink-0 mb-1 ml-auto">
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-luxury-ink text-surface-base px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-luxury-ink/80 transition-colors shadow-lg"
-            >
-              <Plus size={14} /> Post
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Floating Action Button for Mobile */}
       {user && userData?.verified && (
         <button
           onClick={() => setIsModalOpen(true)}
-          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-luxury-ink text-surface-base rounded-full shadow-2xl shadow-luxury-ink/30 hover:scale-105 active:scale-95 transition-all"
+          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
         >
           <Plus size={24} />
         </button>
       )}
 
-      {/* Stories-style Recent Posters */}
-      {recentAuthors.length > 0 && (
-        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-6 mb-2 px-4 sm:px-0">
-          {recentAuthors.map(post => (
-            <Link key={post.authorId} to={`/profile/${post.authorId}`} className="flex flex-col items-center gap-1.5 shrink-0 group">
-              <div className="story-ring rounded-full">
-                <div className="w-16 h-16 rounded-full bg-surface-card flex items-center justify-center overflow-hidden">
-                  {post.authorProfilePicture ? (
-                    <img src={getOptimizedImageUrl(post.authorProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-brand-pink font-serif font-bold text-xl">{post.authorName[0]?.toUpperCase()}</span>
-                  )}
-                </div>
-              </div>
-              <span className="text-[10px] font-bold text-luxury-ink/40 group-hover:text-brand-teal transition-colors max-w-[70px] truncate text-center">
-                {post.authorName.split(' ')[0]}
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Grid / Feed */}
+      {/* Feed */}
       {loading ? (
         <div className="py-20 text-center">
-          <div className="w-10 h-10 border-2 border-brand-teal border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-luxury-ink/40 text-xs font-bold uppercase tracking-widest">Calculating Hype...</p>
+          <div className="w-8 h-8 border-2 border-brand-teal border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-luxury-ink/30 text-sm">Loading...</p>
         </div>
       ) : (
         <>
-          {/* Vertical Feed */}
-          <div className="flex flex-col gap-8 w-full pb-20">
+          <div className="flex flex-col w-full">
             <AnimatePresence>
               {combinedFeed.map((item, index) => {
                 const isProduct = item._kind === 'product';
@@ -1108,12 +1097,12 @@ export default function Feed() {
           </div>
 
           {!loading && combinedFeed.length === 0 && (
-            <div className="py-20 text-center theme-card rounded-3xl border luxury-shadow" style={{ borderColor: 'var(--color-border)' }}>
-              <GraduationCap className="mx-auto text-luxury-ink/15 mb-4" size={56} />
-              <p className="text-luxury-ink/40 font-serif italic text-xl mb-2">
-                {contentType === 'marketplace' ? 'No items listed yet.' : 'No posts found.'}
+            <div className="py-20 text-center px-4">
+              <GraduationCap className="mx-auto text-luxury-ink/10 mb-4" size={48} />
+              <p className="text-luxury-ink/50 text-base mb-1">
+                {contentType === 'marketplace' ? 'No items listed yet.' : 'No posts yet.'}
               </p>
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-teal/40">
+              <p className="text-sm text-luxury-ink/30">
                 {contentType === 'marketplace' ? 'Be the first to list an item!' : 'Be the first to share something!'}
               </p>
             </div>
