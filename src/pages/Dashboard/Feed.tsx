@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark } from 'lucide-react';
+import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
@@ -448,6 +448,8 @@ function PostDetailModal({
 // ─── Main Posts Component ─────────────────────────────────
 
 export default function Feed() {
+  const [privacy, setPrivacy] = useState('public');
+  const [showPostOptions, setShowPostOptions] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1268,145 +1270,67 @@ export default function Feed() {
                 )}
               </AnimatePresence>
 
-              <div className="p-8 overflow-y-auto flex-1 min-h-0">
-                <button
-                  onClick={() => { setIsModalOpen(false); setImageFiles([]); setPendingFiles([]); }}
-                  className="absolute top-6 right-6 p-2 text-luxury-ink/40 hover:text-luxury-ink bg-surface-base rounded-full transition-colors"
-                >
-                  <X size={20} />
-                </button>
-
-                <h2 className="text-3xl font-serif font-bold text-luxury-ink italic mb-2">Create Post</h2>
-                <p className="text-xs font-bold uppercase tracking-widest text-luxury-ink/40 mb-8">Share with the community</p>
-
-                <form onSubmit={handleCreatePost} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Post Type</label>
-                      <select
-                        name="type"
-                        required
-                        value={selectedPostType}
-                        onChange={(e) => {
-                          setSelectedPostType(e.target.value);
-                          if (e.target.value === 'confession') {
-                            setIsAnonymous(true);
-                          } else {
-                            setIsAnonymous(false);
-                          }
-                        }}
-                        className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all appearance-none"
-                      >
-                        {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                      </select>
+              <div className="p-6 md:p-8 overflow-y-visible flex-1 min-h-[60vh] flex flex-col">
+                <form onSubmit={handleCreatePost} className="flex flex-col h-full relative flex-1">
+                  <input type="hidden" name="type" value={selectedPostType} />
+                  <input type="hidden" name="privacy" value={privacy} />
+                  
+                  {/* Top Bar with Avatar */}
+                  <div className="flex items-center gap-3 mb-6 px-1">
+                    <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm overflow-hidden shrink-0">
+                      {user?.photoURL ? (
+                        <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        userData?.firstName?.[0]?.toUpperCase() || <Users size={16} />
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Privacy</label>
-                      <select
-                        name="privacy"
-                        required
-                        className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all appearance-none"
-                      >
-                        <option value="public">Public</option>
-                        <option value="private">Friends Only</option>
-                      </select>
+                    <div className="flex flex-col">
+                      <span className="text-[15px] font-semibold text-luxury-ink">
+                        {selectedPostType === 'confession' && isAnonymous 
+                          ? userData?.anonymousPersonaName || 'Anonymous' 
+                          : `${userData?.firstName || 'User'} ${userData?.lastName || ''}`}
+                      </span>
+                      {selectedPostType === 'confession' && !isAnonymous && (
+                        <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1">
+                          Posting publicly in confessions!
+                        </span>
+                      )}
+                      {selectedPostType === 'confession' && isAnonymous && !userData?.anonymousPersonaName && (
+                         <Link to={`/profile/${user?.uid}`} onClick={() => setIsModalOpen(false)} className="text-[11px] text-purple-600 hover:underline">Set up anonymous persona</Link>
+                      )}
                     </div>
                   </div>
 
-                  {selectedPostType === 'confession' && (
-                    <div className="bg-purple-500/5 border border-purple-500/10 rounded-2xl p-6 space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="text-sm font-bold text-purple-700">Anonymous Mode</h4>
-                          <p className="text-[10px] uppercase tracking-widest text-purple-700/60 font-bold">Hide your real identity</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer mt-1">
-                          <input type="checkbox" className="sr-only peer" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
-                          <div className="w-11 h-6 bg-luxury-ink/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                        </label>
-                      </div>
-
-                      {isAnonymous && (
-                        <div className="space-y-4 pt-4 border-t border-purple-500/10">
-                          {userData?.anonymousPersonaName ? (
-                            <p className="text-sm font-medium text-purple-700">
-                              You will post as: <span className="font-bold">{userData.anonymousPersonaName}</span>
-                            </p>
-                          ) : (
-                            <div className="bg-white/50 border border-purple-500/20 rounded-xl p-4 text-center">
-                              <p className="text-xs text-purple-700 mb-3">You haven't set up an anonymous persona yet.</p>
-                              <Link 
-                                to={`/profile/${user?.uid}`}
-                                onClick={() => setIsModalOpen(false)}
-                                className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold transition-colors"
-                              >
-                                Set Up Persona
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Title</label>
+                  <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar px-1 flex flex-col">
                     <input
                       name="title"
                       type="text"
                       required
-                      placeholder="Enter a descriptive title..."
-                      className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all"
+                      placeholder="Title"
+                      className="w-full bg-transparent text-3xl font-bold text-luxury-ink placeholder-luxury-ink/30 focus:outline-none"
                     />
-                  </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Content</label>
                     <textarea
                       name="content"
                       required
-                      rows={4}
-                      placeholder="Write your details here..."
-                      className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all resize-none"
+                      placeholder="What's on your mind?"
+                      className="w-full flex-1 bg-transparent text-[16px] leading-relaxed text-luxury-ink/80 placeholder-luxury-ink/40 focus:outline-none resize-none min-h-[200px]"
                     ></textarea>
-                  </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">
-                      Images (Optional — will be cropped)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleFilesSelected(e.target.files);
-                          }
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
-                      <div className="w-full bg-surface-base border-2 border-dashed border-luxury-ink/10 rounded-xl py-8 px-6 flex flex-col items-center justify-center text-center hover:border-brand-teal/50 hover:bg-brand-teal/5 transition-all">
-                        <ImageIcon className="text-luxury-ink/20 mb-2" size={32} />
-                        <p className="text-sm font-bold text-luxury-ink/60">Click or drag images here</p>
-                        <p className="text-xs font-medium text-luxury-ink/40 mt-1">Images will be cropped before upload</p>
-                      </div>
-                    </div>
-
+                    {/* Image Previews */}
                     {imageFiles.length > 0 && (
-                      <div className="mt-4 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                      <div className="mt-4 flex gap-2 overflow-x-auto pb-2 no-scrollbar shrink-0">
                         {imageFiles.map((file, index) => (
                           <div key={index} className="relative group shrink-0">
-                            <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-luxury-ink/10">
+                            <div className="w-24 h-24 rounded-xl overflow-hidden border border-luxury-ink/10">
                               <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
                             </div>
                             <button
                               type="button"
                               onClick={() => setImageFiles(prev => prev.filter((_, i) => i !== index))}
-                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                              className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
                             >
-                              <X size={10} />
+                              <X size={12} />
                             </button>
                           </div>
                         ))}
@@ -1414,17 +1338,98 @@ export default function Feed() {
                     )}
                   </div>
 
-                  <div className="pt-4 flex items-center justify-between">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 max-w-[200px]">
-                      Your post will be tagged with your registered city ({userData?.city || 'Lucknow'}).
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="bg-gradient-to-r from-brand-teal to-brand-mint text-white px-8 py-4 rounded-xl text-[11px] font-bold uppercase tracking-[0.2em] hover:shadow-xl hover:shadow-brand-teal/20 transition-all disabled:opacity-50"
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Submit Post'}
-                    </button>
+                  {/* Bottom Toolbar */}
+                  <div className="mt-4 pt-4 border-t border-luxury-ink/5 flex items-center justify-between relative px-1">
+                    <div className="flex items-center gap-1 relative">
+                      <label className="p-2.5 rounded-full hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal transition-colors cursor-pointer group relative">
+                        <ImageIcon size={22} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              handleFilesSelected(e.target.files);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-luxury-ink text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Add Image</span>
+                      </label>
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowPostOptions(!showPostOptions)}
+                          className={`p-2.5 rounded-full transition-colors ${showPostOptions ? 'bg-surface-soft text-brand-teal' : 'hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal'}`}
+                        >
+                          <MoreHorizontal size={22} />
+                        </button>
+                        
+                        {/* Options Popover */}
+                        <AnimatePresence>
+                          {showPostOptions && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              className="absolute bottom-full left-0 mb-2 w-64 bg-surface-card rounded-2xl shadow-xl border border-luxury-ink/10 overflow-hidden z-20 p-2"
+                            >
+                              <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-luxury-ink/40">Privacy</div>
+                              <button type="button" onClick={() => { setPrivacy('public'); setShowPostOptions(false); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors">
+                                <span className="flex items-center gap-2"><Globe size={16} className="text-brand-teal" /> Public</span>
+                                {privacy === 'public' && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                              </button>
+                              <button type="button" onClick={() => { setPrivacy('private'); setShowPostOptions(false); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors">
+                                <span className="flex items-center gap-2"><Lock size={16} className="text-brand-teal" /> Friends Only</span>
+                                {privacy === 'private' && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                              </button>
+                              
+                              <div className="px-3 py-2 mt-2 border-t border-luxury-ink/5 text-[10px] font-bold uppercase tracking-widest text-luxury-ink/40">Post Type</div>
+                              {POST_TYPES.map(t => (
+                                <button 
+                                  key={t.id} 
+                                  type="button" 
+                                  onClick={() => { 
+                                    setSelectedPostType(t.id); 
+                                    if (t.id === 'confession') setIsAnonymous(true); 
+                                    else setIsAnonymous(false);
+                                    setShowPostOptions(false);
+                                  }} 
+                                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors"
+                                >
+                                  <span>{t.label}</span>
+                                  {selectedPostType === t.id && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                      
+                      {/* Active selections indicator */}
+                      <div className="ml-2 flex items-center gap-2 pointer-events-none">
+                        {privacy === 'private' && <span className="flex items-center gap-1 text-[10px] font-semibold bg-surface-soft text-luxury-ink/60 px-2 py-0.5 rounded-full"><Lock size={10} /> Friends</span>}
+                        {selectedPostType !== 'discussion' && <span className="flex items-center gap-1 text-[10px] font-semibold bg-surface-soft text-luxury-ink/60 px-2 py-0.5 rounded-full">{POST_TYPES.find(t => t.id === selectedPostType)?.label}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="px-4 py-2 text-[14px] font-semibold text-luxury-ink/50 hover:text-luxury-ink transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="bg-luxury-ink hover:bg-black text-surface-base px-6 py-2 rounded-full text-[14px] font-semibold shadow-sm transition-all disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Posting...' : 'Post'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
