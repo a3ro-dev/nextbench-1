@@ -1020,6 +1020,25 @@ export default function Feed() {
     }
   };
 
+  const handleSavePost = async (post: Post) => {
+    if (!user) {
+      showToast('Please log in to save posts', 'error');
+      return;
+    }
+    try {
+      if (savedPostIds.has(post.id)) {
+        await unsavePost(user.uid, post.id);
+        showToast('Post removed from saved', 'info');
+      } else {
+        await savePost(user.uid, post.id);
+        showToast('Post saved!', 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to save post', 'error');
+    }
+  };
+
   const handleDeletePost = async (postId: string) => {
     if (!window.confirm('Are you sure you want to delete this post? This will also delete all comments and likes.')) return;
     try {

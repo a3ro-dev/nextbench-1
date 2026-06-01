@@ -356,6 +356,14 @@ service cloud.firestore {
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
+    // === SAVED POSTS ===
+    match /saved_posts/{saveId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
     // === POST REACTIONS (CONFESSIONS) ===
     match /post_reactions/{reactionId} {
       allow read: if isSignedIn();
