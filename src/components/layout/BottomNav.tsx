@@ -10,7 +10,7 @@ export default function BottomNav() {
   const location = useLocation();
 
   const navLinks = [
-    { name: 'Home', path: '/dashboard', icon: Home },
+    { name: 'Home', path: '/', icon: Home },
     { name: 'Search', path: '/search', icon: Search },
     { name: 'Sell', path: '/sell', icon: PlusCircle },
     { name: 'Messages', path: '/messages', icon: MessageSquare },
@@ -41,7 +41,7 @@ export default function BottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 nav-glass border-t pb-safe z-50 md:hidden" style={{ borderColor: 'var(--color-border)' }}>
-      <div className="flex items-center justify-around px-2 py-3">
+      <div className="flex items-center justify-around px-2 py-2">
         {navLinks.map((link) => {
           const isActive = location.pathname === link.path;
           const Icon = link.icon;
@@ -49,23 +49,21 @@ export default function BottomNav() {
             <Link
               key={link.name}
               to={link.path}
-              className={`p-2 rounded-full transition-all flex flex-col items-center gap-1 w-14 ${
+              className={`p-2.5 rounded-xl transition-all flex flex-col items-center gap-0.5 ${
                 isActive 
                   ? 'text-luxury-ink' 
-                  : 'text-luxury-ink/40 hover:text-luxury-ink/70 hover:bg-luxury-ink/5'
+                  : 'text-luxury-ink/35 active:text-luxury-ink/60'
               }`}
             >
               <div className="relative flex items-center justify-center">
-                <Icon size={24} className={`transition-transform ${isActive ? 'stroke-[2.5px] scale-105' : 'stroke-[1.5px]'}`} />
-                {isActive && (
-                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-brand-pink rounded-full border" style={{ borderColor: 'var(--color-surface-base)' }}></div>
-                )}
-                {!isActive && link.name === 'Messages' && unreadMsgCount > 0 && (
+                <Icon size={22} className={`transition-all ${isActive ? 'stroke-[2.5px]' : 'stroke-[1.5px]'}`} />
+                {link.name === 'Messages' && unreadMsgCount > 0 && (
                   <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-brand-pink text-white rounded-full text-[8px] font-bold flex items-center justify-center border-2" style={{ borderColor: 'var(--color-surface-base)' }}>
                     {unreadMsgCount > 9 ? '9+' : unreadMsgCount}
                   </div>
                 )}
               </div>
+              <span className={`text-[10px] ${isActive ? 'font-semibold' : 'font-medium'}`}>{link.name}</span>
             </Link>
           );
         })}

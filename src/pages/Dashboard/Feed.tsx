@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark } from 'lucide-react';
+import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
@@ -40,6 +40,7 @@ interface Post {
   imageUrls?: string[];
   createdAt: any;
   upvotesCount: number;
+  downvotesCount?: number;
   repliesCount: number;
   feedScore?: number;
 }
@@ -139,6 +140,8 @@ function PostDetailModal({
   onClose, 
   onUpvote, 
   hasUpvoted, 
+  onDownvote,
+  hasDownvoted,
   onShare, 
   onDelete, 
   onDeleteReply,
@@ -158,6 +161,8 @@ function PostDetailModal({
   onClose: () => void;
   onUpvote: (post: Post) => void;
   hasUpvoted: boolean;
+  onDownvote: (post: Post) => void;
+  hasDownvoted: boolean;
   onShare: (post: Post) => void;
   onDelete?: (postId: string) => void;
   onDeleteReply?: (replyId: string) => void;
@@ -391,13 +396,25 @@ function PostDetailModal({
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               {post.type !== 'confession' && (
-                <button
-                  onClick={() => onUpvote(post)}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${hasUpvoted ? 'bg-brand-pink/10 text-brand-pink' : 'hover:bg-surface-soft text-luxury-ink/40 hover:text-brand-pink'}`}
-                >
-                  <Heart size={24} className={hasUpvoted ? 'fill-brand-pink' : ''} />
-                  {post.upvotesCount || 0}
-                </button>
+                <div className="flex items-center gap-1 bg-surface-soft/50 rounded-2xl p-1">
+                  <button
+                    onClick={() => onUpvote(post)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${hasUpvoted ? 'bg-brand-pink/10 text-brand-pink' : 'hover:bg-white text-luxury-ink/40 hover:text-brand-pink'}`}
+                  >
+                    <Heart size={20} className={hasUpvoted ? 'fill-brand-pink' : ''} />
+                    {post.upvotesCount || 0}
+                  </button>
+                  <div className="w-[1px] h-6 bg-luxury-ink/10"></div>
+                  <button
+                    onClick={() => onDownvote(post)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${hasDownvoted ? 'bg-indigo-500/10 text-indigo-500' : 'hover:bg-white text-luxury-ink/40 hover:text-indigo-500'}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill={hasDownvoted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                    </svg>
+                    {post.downvotesCount || 0}
+                  </button>
+                </div>
               )}
               <button
                 onClick={() => document.getElementById('reply-input')?.focus()}
@@ -431,6 +448,8 @@ function PostDetailModal({
 // ─── Main Posts Component ─────────────────────────────────
 
 export default function Feed() {
+  const [privacy, setPrivacy] = useState('public');
+  const [showPostOptions, setShowPostOptions] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -451,6 +470,8 @@ export default function Feed() {
 
   const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
   const [upvoteMap, setUpvoteMap] = useState<Record<string, string>>({});
+  const [downvotedPostIds, setDownvotedPostIds] = useState<Set<string>>(new Set());
+  const [downvoteMap, setDownvoteMap] = useState<Record<string, string>>({});
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [replies, setReplies] = useState<any[]>([]);
@@ -622,6 +643,22 @@ export default function Feed() {
 
   useEffect(() => {
     if (!user) return;
+    const q = query(collection(db, 'post_downvotes'), where('userId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const ids = new Set<string>();
+      const map: Record<string, string> = {};
+      snap.forEach(d => {
+        ids.add(d.data().postId);
+        map[d.data().postId] = d.id;
+      });
+      setDownvotedPostIds(ids);
+      setDownvoteMap(map);
+    });
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
     const q = query(collection(db, 'reply_upvotes'), where('userId', '==', user.uid));
     const unsub = onSnapshot(q, snap => {
       const ids = new Set<string>();
@@ -786,13 +823,69 @@ export default function Feed() {
           updatedAt: serverTimestamp()
         });
       } else {
+        // Remove downvote if it exists
+        if (downvotedPostIds.has(post.id)) {
+          const downvoteId = downvoteMap[post.id];
+          if (downvoteId) await deleteDoc(doc(db, 'post_downvotes', downvoteId));
+          await updateDoc(doc(db, 'posts', post.id), {
+            upvotesCount: (post.upvotesCount || 0) + 1,
+            downvotesCount: Math.max(0, (post.downvotesCount || 0) - 1),
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          await updateDoc(doc(db, 'posts', post.id), {
+            upvotesCount: (post.upvotesCount || 0) + 1,
+            updatedAt: serverTimestamp()
+          });
+        }
         await addDoc(collection(db, 'post_upvotes'), {
           userId: user.uid,
           postId: post.id
         });
+      }
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, 'posts');
+    }
+  };
+
+  const handleDownvote = async (post: Post) => {
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    if (!userData?.verified) {
+      showToast('You must be verified to dislike.', 'error');
+      return;
+    }
+
+    try {
+      const isDownvoted = downvotedPostIds.has(post.id);
+      if (isDownvoted) {
+        const downvoteId = downvoteMap[post.id];
+        if (downvoteId) await deleteDoc(doc(db, 'post_downvotes', downvoteId));
         await updateDoc(doc(db, 'posts', post.id), {
-          upvotesCount: (post.upvotesCount || 0) + 1,
+          downvotesCount: Math.max(0, (post.downvotesCount || 0) - 1),
           updatedAt: serverTimestamp()
+        });
+      } else {
+        // Remove upvote if it exists
+        if (upvotedPostIds.has(post.id)) {
+          const upvoteId = upvoteMap[post.id];
+          if (upvoteId) await deleteDoc(doc(db, 'post_upvotes', upvoteId));
+          await updateDoc(doc(db, 'posts', post.id), {
+            downvotesCount: (post.downvotesCount || 0) + 1,
+            upvotesCount: Math.max(0, (post.upvotesCount || 0) - 1),
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          await updateDoc(doc(db, 'posts', post.id), {
+            downvotesCount: (post.downvotesCount || 0) + 1,
+            updatedAt: serverTimestamp()
+          });
+        }
+        await addDoc(collection(db, 'post_downvotes'), {
+          userId: user.uid,
+          postId: post.id
         });
       }
     } catch (e) {
@@ -925,6 +1018,10 @@ export default function Feed() {
       const upvotesSnap = await getDocs(upvotesQ);
       upvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
 
+      const downvotesQ = query(collection(db, 'post_downvotes'), where('postId', '==', postId));
+      const downvotesSnap = await getDocs(downvotesQ);
+      downvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
+
       const reactionsQ = query(collection(db, 'post_reactions'), where('postId', '==', postId));
       const reactionsSnap = await getDocs(reactionsQ);
       reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
@@ -993,84 +1090,73 @@ export default function Feed() {
   }, [posts]);
 
   return (
-    <div className="pt-6 pb-20 px-0 sm:px-4 md:px-0 max-w-2xl mx-auto w-full">
+    <div className="pb-20 w-full">
       <SEO 
         title="Home" 
         description="Discover school info, notes, and interschool events on Nextbench Community." 
       />
 
       {/* Sticky Header Tabs */}
-      <div className="sticky top-0 z-40 nav-glass border-b pt-2 sm:pt-4 flex items-center justify-between px-4 sm:px-6 mb-4 sm:mb-8 gap-4" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex-1 flex items-center justify-center sm:justify-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setContentType('all')}
-            className={`py-3 sm:py-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 whitespace-nowrap shrink-0 ${contentType === 'all' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/30 hover:text-luxury-ink/60'}`}
-          >
-            All
-          </button>
+      <div className="sticky top-0 z-40 nav-glass border-b flex items-center px-4 sm:px-6 gap-1" style={{ borderColor: 'var(--color-border)' }}>
+        <button
+          onClick={() => setContentType('all')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'all' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          For you
+        </button>
+        <button
+          onClick={() => setContentType('posts')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'posts' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          Posts
+        </button>
+        <button
+          onClick={() => setContentType('marketplace')}
+          className={`py-3.5 px-4 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${contentType === 'marketplace' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/40 hover:text-luxury-ink/70'}`}
+        >
+          Marketplace
+        </button>
+      </div>
 
+      {/* Compose Bar — LinkedIn style */}
+      {user && userData?.verified && (
+        <div className="border-b px-4 py-3 flex items-center gap-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
+          <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden shrink-0">
+            {userData?.profilePicture ? (
+              <img src={getOptimizedImageUrl(userData.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="text-brand-teal font-semibold text-sm">{(userData?.name || 'U')[0].toUpperCase()}</span>
+            )}
+          </div>
           <button
-            onClick={() => setContentType('marketplace')}
-            className={`py-3 sm:py-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 whitespace-nowrap shrink-0 ${contentType === 'marketplace' ? 'border-luxury-ink text-luxury-ink' : 'border-transparent text-luxury-ink/30 hover:text-luxury-ink/60'}`}
+            onClick={() => setIsModalOpen(true)}
+            className="flex-1 text-left px-4 py-2.5 rounded-full border text-sm text-luxury-ink/40 hover:bg-surface-soft transition-colors"
+            style={{ borderColor: 'var(--color-border)' }}
           >
-            Marketplace
+            What's on your mind?
           </button>
         </div>
-        
-        {user && userData?.verified && (
-          <div className="hidden sm:block shrink-0 mb-1 ml-auto">
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-luxury-ink text-surface-base px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-luxury-ink/80 transition-colors shadow-lg"
-            >
-              <Plus size={14} /> Post
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Floating Action Button for Mobile */}
       {user && userData?.verified && (
         <button
           onClick={() => setIsModalOpen(true)}
-          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-luxury-ink text-surface-base rounded-full shadow-2xl shadow-luxury-ink/30 hover:scale-105 active:scale-95 transition-all"
+          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
         >
           <Plus size={24} />
         </button>
       )}
 
-      {/* Stories-style Recent Posters */}
-      {recentAuthors.length > 0 && (
-        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-6 mb-2 px-4 sm:px-0">
-          {recentAuthors.map(post => (
-            <Link key={post.authorId} to={`/profile/${post.authorId}`} className="flex flex-col items-center gap-1.5 shrink-0 group">
-              <div className="story-ring rounded-full">
-                <div className="w-16 h-16 rounded-full bg-surface-card flex items-center justify-center overflow-hidden">
-                  {post.authorProfilePicture ? (
-                    <img src={getOptimizedImageUrl(post.authorProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-brand-pink font-serif font-bold text-xl">{post.authorName[0]?.toUpperCase()}</span>
-                  )}
-                </div>
-              </div>
-              <span className="text-[10px] font-bold text-luxury-ink/40 group-hover:text-brand-teal transition-colors max-w-[70px] truncate text-center">
-                {post.authorName.split(' ')[0]}
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Grid / Feed */}
+      {/* Feed */}
       {loading ? (
         <div className="py-20 text-center">
-          <div className="w-10 h-10 border-2 border-brand-teal border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-luxury-ink/40 text-xs font-bold uppercase tracking-widest">Calculating Hype...</p>
+          <div className="w-8 h-8 border-2 border-brand-teal border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-luxury-ink/30 text-sm">Loading...</p>
         </div>
       ) : (
         <>
-          {/* Vertical Feed */}
-          <div className="flex flex-col gap-8 w-full pb-20">
+          <div className="flex flex-col w-full">
             <AnimatePresence>
               {combinedFeed.map((item, index) => {
                 const isProduct = item._kind === 'product';
@@ -1087,7 +1173,11 @@ export default function Feed() {
                     key={`post-${item.id}`} 
                     post={item as Post} 
                     hasUpvoted={upvotedPostIds.has(item.id)} 
-                    onClick={() => setSelectedPost(item as Post)} 
+                    hasDownvoted={downvotedPostIds.has(item.id)}
+                    onClick={() => setSelectedPost(item as Post)}
+                    onUpvote={handleUpvote}
+                    onDownvote={handleDownvote}
+                    onShare={handleShare}
                   />
                 );
 
@@ -1108,12 +1198,12 @@ export default function Feed() {
           </div>
 
           {!loading && combinedFeed.length === 0 && (
-            <div className="py-20 text-center theme-card rounded-3xl border luxury-shadow" style={{ borderColor: 'var(--color-border)' }}>
-              <GraduationCap className="mx-auto text-luxury-ink/15 mb-4" size={56} />
-              <p className="text-luxury-ink/40 font-serif italic text-xl mb-2">
-                {contentType === 'marketplace' ? 'No items listed yet.' : 'No posts found.'}
+            <div className="py-20 text-center px-4">
+              <GraduationCap className="mx-auto text-luxury-ink/10 mb-4" size={48} />
+              <p className="text-luxury-ink/50 text-base mb-1">
+                {contentType === 'marketplace' ? 'No items listed yet.' : 'No posts yet.'}
               </p>
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-teal/40">
+              <p className="text-sm text-luxury-ink/30">
                 {contentType === 'marketplace' ? 'Be the first to list an item!' : 'Be the first to share something!'}
               </p>
             </div>
@@ -1129,6 +1219,8 @@ export default function Feed() {
             onClose={() => { setSelectedPost(null); setReplyingTo(null); }}
             onUpvote={handleUpvote}
             hasUpvoted={upvotedPostIds.has(selectedPost.id)}
+            onDownvote={handleDownvote}
+            hasDownvoted={downvotedPostIds.has(selectedPost.id)}
             onShare={handleShare}
             onDelete={handleDeletePost}
             onDeleteReply={handleDeleteReply}
@@ -1154,12 +1246,32 @@ export default function Feed() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={(e) => {
+              if (isSubmitting) return;
+              const form = document.getElementById('create-post-form') as HTMLFormElement;
+              const titleNode = form?.elements.namedItem('title') as HTMLInputElement;
+              const contentNode = form?.elements.namedItem('content') as HTMLTextAreaElement;
+              const title = titleNode?.value || '';
+              const content = contentNode?.value || '';
+              if (title.trim() || content.trim() || imageFiles.length > 0) {
+                if (window.confirm('Discard your post?')) {
+                  setIsModalOpen(false);
+                  setImageFiles([]);
+                  setPendingFiles([]);
+                }
+              } else {
+                setIsModalOpen(false);
+                setImageFiles([]);
+                setPendingFiles([]);
+              }
+            }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-surface-card rounded-3xl w-full max-w-2xl relative shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
               {/* Full-Screen Loading Overlay inside Modal */}
@@ -1178,145 +1290,67 @@ export default function Feed() {
                 )}
               </AnimatePresence>
 
-              <div className="p-8 overflow-y-auto flex-1 min-h-0">
-                <button
-                  onClick={() => { setIsModalOpen(false); setImageFiles([]); setPendingFiles([]); }}
-                  className="absolute top-6 right-6 p-2 text-luxury-ink/40 hover:text-luxury-ink bg-surface-base rounded-full transition-colors"
-                >
-                  <X size={20} />
-                </button>
-
-                <h2 className="text-3xl font-serif font-bold text-luxury-ink italic mb-2">Create Post</h2>
-                <p className="text-xs font-bold uppercase tracking-widest text-luxury-ink/40 mb-8">Share with the community</p>
-
-                <form onSubmit={handleCreatePost} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Post Type</label>
-                      <select
-                        name="type"
-                        required
-                        value={selectedPostType}
-                        onChange={(e) => {
-                          setSelectedPostType(e.target.value);
-                          if (e.target.value === 'confession') {
-                            setIsAnonymous(true);
-                          } else {
-                            setIsAnonymous(false);
-                          }
-                        }}
-                        className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all appearance-none"
-                      >
-                        {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                      </select>
+              <div className="p-6 md:p-8 overflow-y-visible flex-1 min-h-[60vh] flex flex-col">
+                <form id="create-post-form" onSubmit={handleCreatePost} className="flex flex-col h-full relative flex-1">
+                  <input type="hidden" name="type" value={selectedPostType} />
+                  <input type="hidden" name="privacy" value={privacy} />
+                  
+                  {/* Top Bar with Avatar */}
+                  <div className="flex items-center gap-3 mb-6 px-1">
+                    <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm overflow-hidden shrink-0">
+                      {user?.photoURL ? (
+                        <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        userData?.firstName?.[0]?.toUpperCase() || <Users size={16} />
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Privacy</label>
-                      <select
-                        name="privacy"
-                        required
-                        className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all appearance-none"
-                      >
-                        <option value="public">Public</option>
-                        <option value="private">Friends Only</option>
-                      </select>
+                    <div className="flex flex-col">
+                      <span className="text-[15px] font-semibold text-luxury-ink">
+                        {selectedPostType === 'confession' && isAnonymous 
+                          ? userData?.anonymousPersonaName || 'Anonymous' 
+                          : (userData?.firstName ? `${userData.firstName} ${userData.lastName || ''}`.trim() : user?.displayName || 'User')}
+                      </span>
+                      {selectedPostType === 'confession' && !isAnonymous && (
+                        <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1">
+                          Posting publicly in confessions!
+                        </span>
+                      )}
+                      {selectedPostType === 'confession' && isAnonymous && !userData?.anonymousPersonaName && (
+                         <Link to={`/profile/${user?.uid}`} onClick={() => setIsModalOpen(false)} className="text-[11px] text-purple-600 hover:underline">Set up anonymous persona</Link>
+                      )}
                     </div>
                   </div>
 
-                  {selectedPostType === 'confession' && (
-                    <div className="bg-purple-500/5 border border-purple-500/10 rounded-2xl p-6 space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="text-sm font-bold text-purple-700">Anonymous Mode</h4>
-                          <p className="text-[10px] uppercase tracking-widest text-purple-700/60 font-bold">Hide your real identity</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer mt-1">
-                          <input type="checkbox" className="sr-only peer" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
-                          <div className="w-11 h-6 bg-luxury-ink/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                        </label>
-                      </div>
-
-                      {isAnonymous && (
-                        <div className="space-y-4 pt-4 border-t border-purple-500/10">
-                          {userData?.anonymousPersonaName ? (
-                            <p className="text-sm font-medium text-purple-700">
-                              You will post as: <span className="font-bold">{userData.anonymousPersonaName}</span>
-                            </p>
-                          ) : (
-                            <div className="bg-white/50 border border-purple-500/20 rounded-xl p-4 text-center">
-                              <p className="text-xs text-purple-700 mb-3">You haven't set up an anonymous persona yet.</p>
-                              <Link 
-                                to={`/profile/${user?.uid}`}
-                                onClick={() => setIsModalOpen(false)}
-                                className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold transition-colors"
-                              >
-                                Set Up Persona
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Title</label>
+                  <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar px-1 flex flex-col">
                     <input
                       name="title"
                       type="text"
                       required
-                      placeholder="Enter a descriptive title..."
-                      className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all"
+                      placeholder="Title"
+                      className="w-full bg-transparent text-3xl font-bold text-luxury-ink placeholder-luxury-ink/30 focus:outline-none"
                     />
-                  </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">Content</label>
                     <textarea
                       name="content"
                       required
-                      rows={4}
-                      placeholder="Write your details here..."
-                      className="w-full bg-surface-base border border-luxury-ink/5 rounded-xl py-4 px-6 text-sm font-medium focus:outline-none focus:border-brand-teal transition-all resize-none"
+                      placeholder="What's on your mind?"
+                      className="w-full flex-1 bg-transparent text-[16px] leading-relaxed text-luxury-ink/80 placeholder-luxury-ink/40 focus:outline-none resize-none min-h-[200px]"
                     ></textarea>
-                  </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/60 ml-1">
-                      Images (Optional — will be cropped)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleFilesSelected(e.target.files);
-                          }
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
-                      <div className="w-full bg-surface-base border-2 border-dashed border-luxury-ink/10 rounded-xl py-8 px-6 flex flex-col items-center justify-center text-center hover:border-brand-teal/50 hover:bg-brand-teal/5 transition-all">
-                        <ImageIcon className="text-luxury-ink/20 mb-2" size={32} />
-                        <p className="text-sm font-bold text-luxury-ink/60">Click or drag images here</p>
-                        <p className="text-xs font-medium text-luxury-ink/40 mt-1">Images will be cropped before upload</p>
-                      </div>
-                    </div>
-
+                    {/* Image Previews */}
                     {imageFiles.length > 0 && (
-                      <div className="mt-4 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                      <div className="mt-4 flex gap-2 overflow-x-auto pb-2 no-scrollbar shrink-0">
                         {imageFiles.map((file, index) => (
                           <div key={index} className="relative group shrink-0">
-                            <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-luxury-ink/10">
+                            <div className="w-24 h-24 rounded-xl overflow-hidden border border-luxury-ink/10">
                               <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
                             </div>
                             <button
                               type="button"
                               onClick={() => setImageFiles(prev => prev.filter((_, i) => i !== index))}
-                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                              className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
                             >
-                              <X size={10} />
+                              <X size={12} />
                             </button>
                           </div>
                         ))}
@@ -1324,17 +1358,121 @@ export default function Feed() {
                     )}
                   </div>
 
-                  <div className="pt-4 flex items-center justify-between">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 max-w-[200px]">
-                      Your post will be tagged with your registered city ({userData?.city || 'Lucknow'}).
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="bg-gradient-to-r from-brand-teal to-brand-mint text-white px-8 py-4 rounded-xl text-[11px] font-bold uppercase tracking-[0.2em] hover:shadow-xl hover:shadow-brand-teal/20 transition-all disabled:opacity-50"
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Submit Post'}
-                    </button>
+                  {/* Bottom Toolbar */}
+                  <div className="mt-4 pt-4 border-t border-luxury-ink/5 flex items-center justify-between relative px-1">
+                    <div className="flex items-center gap-1 relative">
+                      <label className="p-2.5 rounded-full hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal transition-colors cursor-pointer group relative">
+                        <ImageIcon size={22} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              handleFilesSelected(e.target.files);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-luxury-ink text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Add Image</span>
+                      </label>
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowPostOptions(!showPostOptions)}
+                          className={`p-2.5 rounded-full transition-colors ${showPostOptions ? 'bg-surface-soft text-brand-teal' : 'hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal'}`}
+                        >
+                          <MoreHorizontal size={22} />
+                        </button>
+                        
+                        {/* Options Popover */}
+                        <AnimatePresence>
+                          {showPostOptions && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              className="absolute bottom-full left-0 mb-2 w-64 bg-surface-card rounded-2xl shadow-xl border border-luxury-ink/10 overflow-hidden z-20 p-2"
+                            >
+                              <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-luxury-ink/40">Privacy</div>
+                              <button type="button" onClick={() => { setPrivacy('public'); setShowPostOptions(false); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors">
+                                <span className="flex items-center gap-2"><Globe size={16} className="text-brand-teal" /> Public</span>
+                                {privacy === 'public' && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                              </button>
+                              <button type="button" onClick={() => { setPrivacy('private'); setShowPostOptions(false); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors">
+                                <span className="flex items-center gap-2"><Lock size={16} className="text-brand-teal" /> Friends Only</span>
+                                {privacy === 'private' && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                              </button>
+                              
+                              <div className="px-3 py-2 mt-2 border-t border-luxury-ink/5 text-[10px] font-bold uppercase tracking-widest text-luxury-ink/40">Post Type</div>
+                              {POST_TYPES.map(t => (
+                                <button 
+                                  key={t.id} 
+                                  type="button" 
+                                  onClick={() => { 
+                                    setSelectedPostType(t.id); 
+                                    if (t.id === 'confession') setIsAnonymous(true); 
+                                    else setIsAnonymous(false);
+                                    setShowPostOptions(false);
+                                  }} 
+                                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-soft rounded-xl text-[13px] font-semibold text-luxury-ink transition-colors"
+                                >
+                                  <span>{t.label}</span>
+                                  {selectedPostType === t.id && <div className="w-1.5 h-1.5 rounded-full bg-brand-teal"></div>}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                      
+                      {/* Active selections indicator */}
+                      <div className="ml-2 flex items-center gap-2">
+                        {privacy === 'private' && (
+                          <button type="button" onClick={() => setShowPostOptions(!showPostOptions)} className="flex items-center gap-1 text-[10px] font-semibold bg-surface-soft hover:bg-surface-soft/80 transition-colors text-luxury-ink/60 px-2 py-0.5 rounded-full cursor-pointer">
+                            <Lock size={10} /> Friends
+                          </button>
+                        )}
+                        <button type="button" onClick={() => setShowPostOptions(!showPostOptions)} className="flex items-center gap-1 text-[10px] font-semibold bg-surface-soft hover:bg-surface-soft/80 transition-colors text-luxury-ink/60 px-2 py-0.5 rounded-full cursor-pointer">
+                          {POST_TYPES.find(t => t.id === selectedPostType)?.label || 'Post Type'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const form = document.getElementById('create-post-form') as HTMLFormElement;
+                          const titleNode = form?.elements.namedItem('title') as HTMLInputElement;
+                          const contentNode = form?.elements.namedItem('content') as HTMLTextAreaElement;
+                          const title = titleNode?.value || '';
+                          const content = contentNode?.value || '';
+                          if (title.trim() || content.trim() || imageFiles.length > 0) {
+                            if (window.confirm('Discard your post?')) {
+                              setIsModalOpen(false);
+                              setImageFiles([]);
+                              setPendingFiles([]);
+                            }
+                          } else {
+                            setIsModalOpen(false);
+                            setImageFiles([]);
+                            setPendingFiles([]);
+                          }
+                        }}
+                        className="px-4 py-2 text-[14px] font-semibold text-luxury-ink/50 hover:text-luxury-ink transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="bg-luxury-ink hover:bg-black text-surface-base px-6 py-2 rounded-full text-[14px] font-semibold shadow-sm transition-all disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Posting...' : 'Post'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -1380,35 +1518,43 @@ function HorizontalDiscoverClubs() {
   if (loading || clubs.length === 0) return null;
 
   return (
-    <div className="py-6 my-2 border-y border-luxury-ink/5 bg-surface-soft/20 -mx-4 px-4 sm:mx-0 sm:rounded-3xl sm:border sm:px-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Users size={18} className="text-brand-teal" />
-          <h3 className="text-sm font-bold text-luxury-ink">Discover Clubs</h3>
+    <div className="py-8 my-2 border-y border-luxury-ink/5 bg-gradient-to-r from-surface-soft/40 via-transparent to-surface-soft/40 -mx-4 px-4 sm:mx-0 sm:border-x-0 sm:px-0 relative overflow-hidden">
+      {/* Subtle decorative glow */}
+      <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-brand-teal/20 to-transparent"></div>
+      
+      <div className="flex items-center justify-between mb-6 px-2">
+        <div className="flex flex-col">
+          <h3 className="text-[15px] font-semibold text-luxury-ink flex items-center gap-2">
+            <Users size={16} className="text-brand-teal" />
+            Clubs for you
+          </h3>
+          <p className="text-[13px] text-luxury-ink/40 mt-1">Find your community on Nextbench</p>
         </div>
       </div>
-      <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+      
+      <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 px-2 snap-x">
         {clubs.map((club) => (
           <Link 
             key={club.id} 
             to={`/club/${club.id}`} 
-            className="flex-shrink-0 w-48 theme-card p-4 rounded-2xl border border-luxury-ink/5 hover:border-brand-teal/30 transition-colors group flex flex-col"
+            className="snap-start flex-shrink-0 w-[160px] bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-luxury-ink/5 hover:border-brand-teal/20 transition-all group flex flex-col items-center text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1"
           >
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-teal/15 to-brand-pink/15 flex items-center justify-center overflow-hidden mb-3 border border-luxury-ink/5">
+            <div className="w-16 h-16 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden mb-3 border-[3px] border-white shadow-sm ring-1 ring-luxury-ink/5">
               {club.avatar ? (
-                <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
               ) : (
-                <Users size={20} className="text-brand-teal" />
+                <Users size={20} className="text-brand-teal/50" />
               )}
             </div>
-            <p className="text-sm font-bold text-luxury-ink truncate group-hover:text-brand-teal transition-colors mb-1">{club.name}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-luxury-ink/30 mb-4">{club.memberCount} members</p>
+            <p className="text-[14px] font-semibold text-luxury-ink truncate w-full group-hover:text-brand-teal transition-colors mb-1">{club.name}</p>
+            <p className="text-[12px] text-luxury-ink/40 mb-4">{club.memberCount} members</p>
+            
             <button
               onClick={(e) => handleJoin(e, club.id)}
               disabled={joiningId === club.id}
-              className="mt-auto w-full py-2 bg-brand-teal text-white rounded-xl text-xs font-bold hover:bg-brand-pink transition-colors shadow-sm disabled:opacity-50"
+              className="mt-auto w-full py-1.5 rounded-full border border-luxury-ink/10 text-[13px] font-semibold text-luxury-ink/70 hover:bg-brand-teal hover:text-white hover:border-brand-teal transition-all disabled:opacity-50 flex items-center justify-center"
             >
-              {joiningId === club.id ? 'Joining...' : 'Join Club'}
+              {joiningId === club.id ? 'Joining' : 'Join'}
             </button>
           </Link>
         ))}
