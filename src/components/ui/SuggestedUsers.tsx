@@ -100,11 +100,11 @@ export default function SuggestedUsers() {
 
   if (!user) {
     return (
-      <div className="pt-8 px-6 sticky top-0 h-screen overflow-y-auto no-scrollbar hidden lg:block border-l border-luxury-ink/5">
-        <div className="bg-surface-soft/50 rounded-2xl p-6 border border-luxury-ink/5 text-center">
-          <h3 className="text-sm font-bold text-luxury-ink mb-2">Join the Community</h3>
-          <p className="text-xs text-luxury-ink/60 mb-4">Log in to follow students from your school and see personalized suggestions.</p>
-          <Link to="/login" className="block w-full py-2 bg-brand-teal text-white rounded-full font-bold text-sm hover:bg-brand-teal/90 transition-all">
+      <div className="pt-8 px-5 sticky top-0 h-screen overflow-y-auto no-scrollbar hidden lg:block">
+        <div className="p-4 text-center">
+          <h3 className="text-sm font-semibold text-luxury-ink mb-2">Join the Community</h3>
+          <p className="text-xs text-luxury-ink/50 mb-4">Log in to follow students from your school and see personalized suggestions.</p>
+          <Link to="/login" className="block w-full py-2.5 bg-brand-teal text-white rounded-xl font-semibold text-sm hover:bg-brand-teal/90 transition-all">
             Log In
           </Link>
         </div>
@@ -115,20 +115,21 @@ export default function SuggestedUsers() {
   if (!loading && suggestions.length === 0) return null;
 
   return (
-    <div className="pt-8 px-6 sticky top-0 h-screen overflow-y-auto no-scrollbar hidden lg:block border-l border-luxury-ink/5">
-      <div className="bg-surface-soft/50 rounded-2xl p-6 border border-luxury-ink/5">
-        <h3 className="text-sm font-bold text-luxury-ink mb-6">Suggested for you</h3>
-        <div className="flex flex-col gap-5">
+    <div className="pt-8 px-5 sticky top-0 h-screen overflow-y-auto no-scrollbar hidden lg:block">
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[13px] font-semibold text-luxury-ink">Suggested for you</h3>
+        </div>
+        <div className="flex flex-col gap-4">
           {loading ? (
-            // Skeleton Loader
             Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 animate-pulse">
-                <div className="w-10 h-10 rounded-full bg-luxury-ink/5 shrink-0" />
+                <div className="w-9 h-9 rounded-full bg-luxury-ink/5 shrink-0" />
                 <div className="flex-1">
-                  <div className="h-3.5 bg-luxury-ink/5 rounded w-24 mb-2" />
+                  <div className="h-3 bg-luxury-ink/5 rounded w-24 mb-1.5" />
                   <div className="h-2.5 bg-luxury-ink/5 rounded w-16" />
                 </div>
-                <div className="w-8 h-8 rounded-xl bg-luxury-ink/5 shrink-0" />
+                <div className="w-8 h-8 rounded-lg bg-luxury-ink/5 shrink-0" />
               </div>
             ))
           ) : (
@@ -137,25 +138,25 @@ export default function SuggestedUsers() {
               return (
                 <Link key={suggestion.id} to={`/profile/${suggestion.id}`} className="flex items-center justify-between group">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm shrink-0 overflow-hidden border border-brand-teal/5">
+                  <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center text-brand-teal font-semibold text-sm shrink-0 overflow-hidden">
                     {suggestion.profilePicture ? (
                       <img src={getOptimizedImageUrl(suggestion.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : suggestion.name[0]?.toUpperCase()}
                   </div>
                   <div className="min-w-0 pr-2">
-                    <p className="text-[13px] font-bold text-luxury-ink truncate group-hover:text-brand-teal transition-colors">{suggestion.name}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-luxury-ink/30 truncate">{suggestion.school}</p>
+                    <p className="text-[13px] font-semibold text-luxury-ink truncate group-hover:text-brand-teal transition-colors">{suggestion.name}</p>
+                    <p className="text-[11px] text-luxury-ink/30 truncate">{suggestion.school}</p>
                   </div>
                 </div>
                 <button
                   onClick={(e) => toggleFollow(e, suggestion.id)}
-                  className={`p-2 rounded-xl transition-all shrink-0 ${
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all shrink-0 ${
                     isFollowing 
-                      ? 'bg-luxury-ink/5 text-luxury-ink/40 hover:bg-red-50 hover:text-red-500' 
-                      : 'bg-brand-teal text-white hover:bg-brand-pink shadow-md shadow-brand-teal/20'
+                      ? 'bg-luxury-ink/5 text-luxury-ink/50 hover:text-red-500' 
+                      : 'bg-brand-teal text-white hover:bg-brand-teal/90'
                   }`}
                 >
-                  {isFollowing ? <UserCheck size={16} /> : <UserPlus size={16} />}
+                  {isFollowing ? 'Following' : 'Follow'}
                 </button>
               </Link>
             );
@@ -165,17 +166,17 @@ export default function SuggestedUsers() {
       </div>
 
       {/* Trending Section */}
-      <div className="bg-surface-soft/50 rounded-2xl p-6 border border-luxury-ink/5 mt-6">
+      <div className="border-t pt-5 mb-6" style={{ borderColor: 'var(--color-border)' }}>
         <TrendingSidebar />
       </div>
 
       {/* Discover Clubs */}
       <DiscoverClubs />
       
-      <div className="mt-8 flex flex-wrap gap-x-3 gap-y-2 px-2">
-        <Link to="/terms" className="text-[10px] uppercase tracking-widest font-bold text-luxury-ink/20 hover:text-luxury-ink/40 transition-colors">Terms</Link>
-        <Link to="/privacy" className="text-[10px] uppercase tracking-widest font-bold text-luxury-ink/20 hover:text-luxury-ink/40 transition-colors">Privacy</Link>
-        <span className="text-[10px] uppercase tracking-widest font-bold text-luxury-ink/20">© 2026 Nextbench</span>
+      <div className="mt-8 flex flex-wrap gap-x-3 gap-y-1.5 pb-8">
+        <Link to="/terms" className="text-[11px] text-luxury-ink/25 hover:text-luxury-ink/40 transition-colors">Terms</Link>
+        <Link to="/privacy" className="text-[11px] text-luxury-ink/25 hover:text-luxury-ink/40 transition-colors">Privacy</Link>
+        <span className="text-[11px] text-luxury-ink/25">© 2026 Nextbench</span>
       </div>
     </div>
   );
