@@ -12,11 +12,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { userData } = useAuth();
   const needsUsername = !!(userData && userData.verified && !userData.username);
   return (
-    <div className="min-h-screen bg-surface-base font-sans selection:bg-brand-teal/20 selection:text-brand-teal text-luxury-ink relative">
-      {/* Ambient decoration orbs */}
-      <div className="ambient-orb ambient-orb-teal" />
-      <div className="ambient-orb ambient-orb-pink" />
-      
+    <div className="min-h-screen bg-surface-base font-sans text-luxury-ink relative">
       {userData && !userData.verified && (
         <div className="bg-brand-teal text-white px-4 py-3 text-center text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-3 z-50 relative">
           <ShieldAlert size={16} />
@@ -37,7 +33,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Center Main Content */}
-        <main className="flex-1 min-w-0 md:border-l md:border-r pb-20 md:pb-0" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
+        <main className="flex-1 min-w-0 md:border-x pb-20 md:pb-0" style={{ borderColor: 'var(--color-border)' }}>
           {children}
         </main>
 
