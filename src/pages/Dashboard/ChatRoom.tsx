@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, ArrowLeft, MoreVertical, ShieldCheck, User, Package, Phone, Flag, Camera, X, Image as ImageIcon, CornerDownRight, Pin, CheckCircle2, Circle, Copy, Trash2 } from 'lucide-react';
+import { Send, ArrowLeft, MoreVertical, ShieldCheck, User, Package, Phone, Flag, Camera, X, Image as ImageIcon, CornerDownRight, Pin, CheckCircle2, Circle, Copy, Trash2, Download } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { db } from '../../lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, getDoc, where, getDocs, writeBatch, arrayUnion, arrayRemove, limit } from 'firebase/firestore';
@@ -68,7 +68,7 @@ export default function ChatRoom() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [menuPosition, setMenuPosition] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
-
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
   const blockedIds = useBlockedIds();
   const blockedByIds = useBlockedByIds();
 
@@ -559,7 +559,7 @@ export default function ChatRoom() {
                           src={getOptimizedImageUrl(msg.image)} 
                           alt="Shared" 
                           className="max-w-full max-h-[300px] object-contain hover:opacity-90 transition-opacity"
-                          onClick={(e) => { e.stopPropagation(); window.open(getOptimizedImageUrl(msg.image), '_blank'); }}
+                          onClick={(e) => { e.stopPropagation(); setViewingImage(getOptimizedImageUrl(msg.image)); }}
                           referrerPolicy="no-referrer"
                           onLoad={scrollToBottom}
                         />
@@ -748,7 +748,57 @@ export default function ChatRoom() {
         </div>
         )}
       </div>
-
+      {/* Image Viewer */}
+      <AnimatePresence>
+        {viewingImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+            onClick={() => setViewingImage(null)}
+          >
+            <button
+              onClick={() => setViewingImage(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X size={24} className="text-white" />
+            </button>
+             <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const response = await fetch(viewingImage ?? '');
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'image.' + (blob.type.split('/')[1] || 'jpg');
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                } catch {
+                  showToast('Failed to download image', 'error');
+                }
+              }}
+              className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              title="Download image"
+            >
+              <Download size={20} className="text-white" />
+            </button>
+            <motion.img
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              src={viewingImage}
+              alt="Full size"
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Delete For Me Modal */}
       <AnimatePresence>
         {deleteConfirmMsgId && (
