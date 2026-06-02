@@ -67,6 +67,7 @@ export default function ChatRoom() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [menuPosition, setMenuPosition] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
 
   const blockedIds = useBlockedIds();
   const blockedByIds = useBlockedByIds();
@@ -184,6 +185,12 @@ export default function ChatRoom() {
     
     return () => clearInterval(interval);
   }, [messages]);
+
+  useEffect(() => {
+    const handleClickOutside = () => { setSelectedMessageId(null); setMenuPosition(null); };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const sendMessage = async (text?: string, image?: string) => {
     if ((!text?.trim() && !image) || !user || !roomId) return;
@@ -504,10 +511,29 @@ export default function ChatRoom() {
                 </button>
               )}
 
-              <div 
-                onClick={() => {
-                  if (isSelectMode) toggleMessageSelection(msg.id);
-                  else setSelectedMessageId(selectedMessageId === msg.id ? null : msg.id);
+              <div
+                data-msg-id={msg.id}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  if (isSelectMode) { toggleMessageSelection(msg.id); return; }
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const spaceBelow = window.innerHeight - rect.bottom;
+                  const pos = spaceBelow < 220
+                    ? { bottom: window.innerHeight - rect.top + 4, ...(isMe ? { right: window.innerWidth - rect.right } : { left: rect.left }) }
+                    : { top: rect.bottom + 4, ...(isMe ? { right: window.innerWidth - rect.right } : { left: rect.left }) };
+                  setMenuPosition(selectedMessageId === msg.id ? null : pos);
+                  setSelectedMessageId(selectedMessageId === msg.id ? null : msg.id);
+                }}
+                onContextMenu={(e: React.MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const spaceBelow = window.innerHeight - rect.bottom;
+                  const pos = spaceBelow < 220
+                    ? { bottom: window.innerHeight - rect.top + 4, ...(isMe ? { right: window.innerWidth - rect.right } : { left: rect.left }) }
+                    : { top: rect.bottom + 4, ...(isMe ? { right: window.innerWidth - rect.right } : { left: rect.left }) };
+                  setMenuPosition(selectedMessageId === msg.id ? null : pos);
+                  setSelectedMessageId(selectedMessageId === msg.id ? null : msg.id);
                 }}
                 className={`max-w-[75%] px-5 py-3.5 rounded-2xl text-sm font-medium cursor-pointer relative ${
                 isMe 
@@ -547,48 +573,7 @@ export default function ChatRoom() {
                   {msg.createdAt?.toDate?.()?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || '...'}
                 </div>
 
-                {/* Message Options Menu */}
-                {selectedMessageId === msg.id && (
-                  <div className={`absolute top-full mt-1 ${isMe ? 'right-0' : 'left-0'} z-20 w-48 bg-surface-card rounded-xl shadow-2xl border flex flex-col overflow-hidden`} style={{ borderColor: 'var(--color-border)' }}>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setSelectedMessageId(null); }}
-                      className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2"
-                    >
-                      <CornerDownRight size={16} className="opacity-60" /> Reply
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handlePinMessage(msg.id, msg.text); }}
-                      className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5"
-                    >
-                      <Pin size={16} className="opacity-60" /> Pin
-                    </button>
-                    <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        setIsSelectMode(true); 
-                        setSelectedMessages(new Set([msg.id]));
-                        setSelectedMessageId(null); 
-                      }}
-                      className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5"
-                    >
-                      <CheckCircle2 size={16} className="opacity-60" /> Select
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmMsgId(msg.id); }}
-                      className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5"
-                    >
-                      <X size={16} className="opacity-60" /> Delete for me
-                    </button>
-                    {isMe && !isDeleted && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setDeleteEveryoneConfirmMsgId(msg.id); }}
-                        className="px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-red-50 transition-colors border-t border-luxury-ink/5 flex items-center gap-2"
-                      >
-                        <Flag size={16} /> Delete for everyone
-                      </button>
-                    )}
-                  </div>
-                )}
+                
               </div>
 
               {isSelectMode && isMe && (
@@ -601,7 +586,43 @@ export default function ChatRoom() {
         })}
         <div ref={messagesEndRef} />
       </div>
-
+        {/* Message Options Menu - Fixed */}
+      {selectedMessageId && menuPosition && (() => {
+        const msg = messages.find(m => m.id === selectedMessageId);
+        if (!msg) return null;
+        const isMe = msg.senderId === user.uid;
+        const isDeleted = msg.isDeletedForEveryone;
+        return (
+          <div
+            className="fixed z-50 w-48 bg-surface-card rounded-xl shadow-2xl border flex flex-col overflow-hidden"
+            style={{ borderColor: 'var(--color-border)', ...menuPosition }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setSelectedMessageId(null); setMenuPosition(null); }}
+              className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2">
+              <CornerDownRight size={16} className="opacity-60" /> Reply
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); handlePinMessage(msg.id, msg.text); setMenuPosition(null); }}
+              className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5">
+              <Pin size={16} className="opacity-60" /> Pin
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setIsSelectMode(true); setSelectedMessages(new Set([msg.id])); setSelectedMessageId(null); setMenuPosition(null); }}
+              className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5">
+              <CheckCircle2 size={16} className="opacity-60" /> Select
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmMsgId(msg.id); setMenuPosition(null); }}
+              className="px-4 py-3 text-left text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors flex items-center gap-2 border-t border-luxury-ink/5">
+              <X size={16} className="opacity-60" /> Delete for me
+            </button>
+            {isMe && !isDeleted && (
+              <button onClick={(e) => { e.stopPropagation(); setDeleteEveryoneConfirmMsgId(msg.id); setMenuPosition(null); }}
+                className="px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-red-50 transition-colors border-t border-luxury-ink/5 flex items-center gap-2">
+                <Flag size={16} /> Delete for everyone
+              </button>
+            )}
+          </div>
+        );
+      })()}
       {/* Quick Replies */}
       {showQuickReplies && !isBlocked && (
         <div className="px-4 md:px-6 pb-2">
