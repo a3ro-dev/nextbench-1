@@ -486,7 +486,7 @@ export default function ChatRoom() {
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 chat-scroll">
         {messages.length === 0 && (
           <div className="text-center py-12">
             <p className="text-luxury-ink/20 font-serif italic text-lg mb-2">Start the conversation</p>
