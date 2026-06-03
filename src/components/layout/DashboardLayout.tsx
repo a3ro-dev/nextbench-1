@@ -6,11 +6,14 @@ import SuggestedUsers from '../ui/SuggestedUsers';
 import { useAuth } from '../../lib/AuthContext';
 import UsernameSetup from '../ui/UsernameSetup';
 import { ShieldAlert } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { userData } = useAuth();
+  const location = useLocation();
   const needsUsername = !!(userData && userData.verified && !userData.username);
+  const isClubPage = location.pathname.startsWith('/club');
+
   return (
     <div className="min-h-screen bg-surface-base font-sans text-luxury-ink relative">
       {userData && !userData.verified && (
@@ -28,7 +31,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="w-full flex relative z-10">
         
         {/* Left Sidebar (snapped to left edge) */}
-        <div className="hidden md:block w-[72px] xl:w-[240px] shrink-0 border-r" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
+        <div className={`hidden md:block shrink-0 border-r transition-all duration-300 ${
+          isClubPage ? 'w-[72px]' : 'w-[72px] xl:w-[240px]'
+        }`} style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
           <SidebarNav />
         </div>
 
