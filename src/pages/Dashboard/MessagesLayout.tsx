@@ -41,6 +41,8 @@ export default function MessagesLayout() {
   const { roomId: routeRoomId } = useParams<{ roomId?: string }>();
   const { showToast } = useToast();
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   // The "active" chat — either from URL param or clicked in sidebar
   const [activeRoomId, setActiveRoomId] = useState<string | null>(routeRoomId || null);
   const [activeRoomState, setActiveRoomState] = useState<any>(location.state || null);
@@ -76,6 +78,15 @@ export default function MessagesLayout() {
     setActiveRoomType('chat'); // if loading from /messages/:roomId, it's a chat
     setActiveRoomState(location.state || null);
   }, [routeRoomId]);
+
+  // Listen to toggle events from global sidebar
+  useEffect(() => {
+    const handleToggle = () => {
+      setSidebarCollapsed(prev => !prev);
+    };
+    window.addEventListener('messages-sidebar-toggle', handleToggle);
+    return () => window.removeEventListener('messages-sidebar-toggle', handleToggle);
+  }, []);
 
   // Load chat rooms
   useEffect(() => {
@@ -259,10 +270,11 @@ export default function MessagesLayout() {
   const Sidebar = (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-4 pt-5 pb-0 border-b border-luxury-ink/5 bg-surface-base shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-luxury-ink">Messages</h1>
-          <div className="flex gap-2">
+      <div className={`pt-5 border-b border-luxury-ink/5 bg-surface-base shrink-0 transition-all ${
+        sidebarCollapsed ? 'px-2 pb-4' : 'px-4 pb-0'
+      }`}>
+        {sidebarCollapsed ? (
+          <div className="flex flex-col items-center gap-3">
             <button onClick={() => setShowNewDM(true)} className="p-2 text-brand-teal bg-brand-teal/10 rounded-full hover:bg-brand-teal/20 transition-colors" title="New Message">
               <MessageSquare size={16} />
             </button>
@@ -270,19 +282,33 @@ export default function MessagesLayout() {
               <Users size={16} />
             </button>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold text-luxury-ink leading-none">Messages</h1>
+              <div className="flex gap-2">
+                <button onClick={() => setShowNewDM(true)} className="p-2 text-brand-teal bg-brand-teal/10 rounded-full hover:bg-brand-teal/20 transition-colors" title="New Message">
+                  <MessageSquare size={16} />
+                </button>
+                <button onClick={() => setShowCreateClub(true)} className="p-2 text-brand-teal bg-brand-teal/10 rounded-full hover:bg-brand-teal/20 transition-colors" title="New Club">
+                  <Users size={16} />
+                </button>
+              </div>
+            </div>
 
-        {/* Search */}
-        <div className="relative pt-1 pb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-ink/30 -mt-1.5" size={15} />
-          <input
-            type="text"
-            placeholder="Search chats & clubs"
-            value={chatSearchTerm}
-            onChange={(e) => setChatSearchTerm(e.target.value)}
-            className="w-full bg-surface-soft border-none rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 transition-all text-sm font-medium"
-          />
-        </div>
+            {/* Search */}
+            <div className="relative pt-1 pb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-ink/30 -mt-1.5" size={15} />
+              <input
+                type="text"
+                placeholder="Search chats & clubs"
+                value={chatSearchTerm}
+                onChange={(e) => setChatSearchTerm(e.target.value)}
+                className="w-full bg-surface-soft border-none rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 transition-all text-sm font-medium"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* List */}
@@ -290,15 +316,19 @@ export default function MessagesLayout() {
         {loading || clubsLoading ? (
           <div className="py-12 text-center font-serif italic text-luxury-ink/30 text-sm">Loading...</div>
         ) : combinedList.length === 0 ? (
-          <div className="py-12 text-center px-4">
-            <MessageSquare className="mx-auto text-brand-teal/20 mb-3" size={28} />
-            <p className="text-sm font-bold text-luxury-ink/30 mb-3">No messages</p>
-            <button onClick={() => setShowNewDM(true)} className="text-xs font-bold text-brand-teal hover:underline block mx-auto mb-2">
-              Start a conversation
-            </button>
-            <button onClick={() => setShowCreateClub(true)} className="text-xs font-bold text-brand-teal hover:underline block mx-auto">
-              Create a club
-            </button>
+          <div className="py-12 text-center px-2">
+            <MessageSquare className="mx-auto text-brand-teal/20 mb-3" size={24} />
+            {!sidebarCollapsed && (
+              <>
+                <p className="text-sm font-bold text-luxury-ink/30 mb-3">No messages</p>
+                <button onClick={() => setShowNewDM(true)} className="text-xs font-bold text-brand-teal hover:underline block mx-auto mb-2">
+                  Start a conversation
+                </button>
+                <button onClick={() => setShowCreateClub(true)} className="text-xs font-bold text-brand-teal hover:underline block mx-auto">
+                  Create a club
+                </button>
+              </>
+            )}
           </div>
         ) : (
           combinedList.map((item) => {
@@ -309,16 +339,21 @@ export default function MessagesLayout() {
                 <button
                   key={`club-${club.id}`}
                   onClick={() => openChat(club.id, null, 'club')}
-                  className={`w-full flex items-center gap-3 py-3 px-4 transition-colors cursor-pointer text-left ${
+                  className={`w-full flex items-center transition-colors cursor-pointer text-left ${
+                    sidebarCollapsed ? 'justify-center py-3.5 px-2' : 'gap-3 py-3 px-4'
+                  } ${
                     isActive ? 'bg-brand-teal/8 border-r-2 border-brand-teal' : 'hover:bg-surface-soft'
                   }`}
+                  title={sidebarCollapsed ? club.name : undefined}
                 >
                   <div className="relative shrink-0">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-teal/15 to-brand-pink/15 flex items-center justify-center overflow-hidden border border-luxury-ink/5">
+                    <div className={`rounded-xl bg-gradient-to-br from-brand-teal/15 to-brand-pink/15 flex items-center justify-center overflow-hidden border border-luxury-ink/5 ${
+                      sidebarCollapsed ? 'w-10 h-10' : 'w-11 h-11'
+                    }`}>
                       {club.avatar ? (
                         <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
-                        <Users size={18} className="text-brand-teal" />
+                        <Users size={sidebarCollapsed ? 16 : 18} className="text-brand-teal" />
                       )}
                     </div>
                     {club.type === 'private' && (
@@ -327,23 +362,25 @@ export default function MessagesLayout() {
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="truncate text-sm font-semibold text-luxury-ink flex items-center gap-1">
-                        {club.name}
-                        {club.leadId === user?.uid && <Crown size={10} className="text-amber-500 shrink-0" />}
-                      </span>
-                      <span className="text-[10px] text-luxury-ink/30 ml-1 shrink-0">
-                        {club.updatedAt?.toDate?.()?.toLocaleDateString([], { month: 'short', day: 'numeric' }) || ''}
-                      </span>
+                  {!sidebarCollapsed && (
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="truncate text-sm font-semibold text-luxury-ink flex items-center gap-1">
+                          {club.name}
+                          {club.leadId === user?.uid && <Crown size={10} className="text-amber-500 shrink-0" />}
+                        </span>
+                        <span className="text-[10px] text-luxury-ink/30 ml-1 shrink-0">
+                          {club.updatedAt?.toDate?.()?.toLocaleDateString([], { month: 'short', day: 'numeric' }) || ''}
+                        </span>
+                      </div>
+                      <p className="text-xs truncate text-luxury-ink/50">
+                        {club.lastSenderName
+                          ? <>{club.lastSenderId === user?.uid ? 'You' : club.lastSenderName}: {club.lastMessage || ''}</>
+                          : <span className="italic text-luxury-ink/25">No messages yet</span>
+                        }
+                      </p>
                     </div>
-                    <p className="text-xs truncate text-luxury-ink/50">
-                      {club.lastSenderName
-                        ? <>{club.lastSenderId === user?.uid ? 'You' : club.lastSenderName}: {club.lastMessage || ''}</>
-                        : <span className="italic text-luxury-ink/25">No messages yet</span>
-                      }
-                    </p>
-                  </div>
+                  )}
                 </button>
               );
             } else {
@@ -354,16 +391,21 @@ export default function MessagesLayout() {
                 <button
                   key={`chat-${room.id}`}
                   onClick={() => openChat(room.id, { otherUser: room.otherUser, roomData: room }, 'chat')}
-                  className={`w-full flex items-center gap-3 py-3 px-4 transition-colors cursor-pointer text-left ${
+                  className={`w-full flex items-center transition-colors cursor-pointer text-left ${
+                    sidebarCollapsed ? 'justify-center py-3.5 px-2' : 'gap-3 py-3 px-4'
+                  } ${
                     isActive ? 'bg-brand-teal/8 border-r-2 border-brand-teal' : 'hover:bg-surface-soft'
                   }`}
+                  title={sidebarCollapsed ? (room.otherUser?.name || 'Unknown User') : undefined}
                 >
                   <div className="relative shrink-0">
-                    <div className="w-11 h-11 rounded-full bg-brand-teal/5 flex items-center justify-center overflow-hidden">
+                    <div className={`rounded-full bg-brand-teal/5 flex items-center justify-center overflow-hidden ${
+                      sidebarCollapsed ? 'w-10 h-10' : 'w-11 h-11'
+                    }`}>
                       {room.otherUser?.profilePicture ? (
                         <img src={getOptimizedImageUrl(room.otherUser.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
-                        <User size={20} className="text-brand-teal" />
+                        <User size={sidebarCollapsed ? 18 : 20} className="text-brand-teal" />
                       )}
                     </div>
                     {room.otherUser?.verified && (
@@ -371,24 +413,29 @@ export default function MessagesLayout() {
                         <ShieldCheck size={8} />
                       </div>
                     )}
+                    {sidebarCollapsed && isUnread && (
+                      <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-brand-teal rounded-full border-2 border-surface-base shrink-0" />
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className={`truncate text-sm ${isUnread ? 'font-bold text-brand-teal' : 'font-semibold text-luxury-ink'}`}>
-                        {room.otherUser?.name || 'Unknown User'}
-                      </span>
-                      <span className={`text-[10px] whitespace-nowrap ml-1 shrink-0 ${isUnread ? 'text-brand-teal font-bold' : 'text-luxury-ink/30'}`}>
-                        {room.updatedAt?.toDate?.()?.toLocaleDateString([], { month: 'short', day: 'numeric' }) || ''}
-                      </span>
+                  {!sidebarCollapsed && (
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className={`truncate text-sm ${isUnread ? 'font-bold text-brand-teal' : 'font-semibold text-luxury-ink'}`}>
+                          {room.otherUser?.name || 'Unknown User'}
+                        </span>
+                        <span className={`text-[10px] whitespace-nowrap ml-1 shrink-0 ${isUnread ? 'text-brand-teal font-bold' : 'text-luxury-ink/30'}`}>
+                          {room.updatedAt?.toDate?.()?.toLocaleDateString([], { month: 'short', day: 'numeric' }) || ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-xs truncate flex-1 ${isUnread ? 'text-luxury-ink font-semibold' : 'text-luxury-ink/50'}`}>
+                          {!isDM && <span className="text-brand-teal font-medium mr-1">[{room.productTitle}]</span>}
+                          {room.lastSenderId === user?.uid ? 'You: ' : ''}{room.lastMessage || 'Start the conversation...'}
+                        </p>
+                        {isUnread && <div className="w-2 h-2 bg-brand-teal rounded-full shrink-0" />}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <p className={`text-xs truncate flex-1 ${isUnread ? 'text-luxury-ink font-semibold' : 'text-luxury-ink/50'}`}>
-                        {!isDM && <span className="text-brand-teal font-medium mr-1">[{room.productTitle}]</span>}
-                        {room.lastSenderId === user?.uid ? 'You: ' : ''}{room.lastMessage || 'Start the conversation...'}
-                      </p>
-                      {isUnread && <div className="w-2 h-2 bg-brand-teal rounded-full shrink-0" />}
-                    </div>
-                  </div>
+                  )}
                 </button>
               );
             }
@@ -425,7 +472,8 @@ export default function MessagesLayout() {
         <div
           className={`
             flex flex-col border-r border-luxury-ink/5
-            w-full md:w-[320px] lg:w-360px shrink-0
+            transition-all duration-300 ease-in-out shrink-0
+            ${sidebarCollapsed ? 'w-[72px]' : 'w-full md:w-[320px] lg:w-[360px]'}
             ${activeRoomId ? 'hidden md:flex' : 'flex'}
           `}
         >
