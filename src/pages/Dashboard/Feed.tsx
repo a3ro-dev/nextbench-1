@@ -12,7 +12,7 @@ import { getOptimizedImageUrl } from '../../lib/utils';
 import { useFollowingIds } from '../../lib/follows';
 import { isTextSafe } from '../../lib/moderation';
 import { createNotification } from '../../lib/notifications';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import ImageCropper from '../../components/ui/ImageCropper';
 import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
@@ -459,6 +459,25 @@ export default function Feed() {
   const [wishlistMap, setWishlistMap] = useState<Record<string, string>>({});
 
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const postIdFromUrl = searchParams.get('postId');
+  
+  useEffect(() => {
+    if (postIdFromUrl && rawPosts.length > 0 && !selectedPost) {
+      const p = rawPosts.find(p => p.id === postIdFromUrl);
+      if (p) {
+        setSelectedPost(p);
+      } else {
+        getDoc(doc(db, 'posts', postIdFromUrl)).then(snap => {
+          if (snap.exists()) setSelectedPost({ id: snap.id, ...snap.data() } as Post);
+        });
+      }
+      // Remove query param to clean up url
+      searchParams.delete('postId');
+      setSearchParams(searchParams);
+    }
+  }, [postIdFromUrl, rawPosts, selectedPost, setSearchParams, searchParams]);
   
   // Confession state
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -827,8 +846,26 @@ export default function Feed() {
       return;
     }
 
+    const isUpvoted = upvotedPostIds.has(post.id);
+    const isDownvoted = downvotedPostIds.has(post.id);
+
+    // Optimistic UI update
+    setUpvotedPostIds(prev => {
+      const next = new Set(prev);
+      if (isUpvoted) next.delete(post.id);
+      else next.add(post.id);
+      return next;
+    });
+
+    if (!isUpvoted && isDownvoted) {
+      setDownvotedPostIds(prev => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+    }
+
     try {
-      const isUpvoted = upvotedPostIds.has(post.id);
       if (isUpvoted) {
         const upvoteId = upvoteMap[post.id];
         if (upvoteId) await deleteDoc(doc(db, 'post_upvotes', upvoteId));
@@ -858,6 +895,20 @@ export default function Feed() {
         });
       }
     } catch (e) {
+      // Revert optimistic update
+      setUpvotedPostIds(prev => {
+        const next = new Set(prev);
+        if (isUpvoted) next.add(post.id);
+        else next.delete(post.id);
+        return next;
+      });
+      if (!isUpvoted && isDownvoted) {
+        setDownvotedPostIds(prev => {
+          const next = new Set(prev);
+          next.add(post.id);
+          return next;
+        });
+      }
       handleFirestoreError(e, OperationType.UPDATE, 'posts');
     }
   };
@@ -872,8 +923,26 @@ export default function Feed() {
       return;
     }
 
+    const isDownvoted = downvotedPostIds.has(post.id);
+    const isUpvoted = upvotedPostIds.has(post.id);
+
+    // Optimistic UI update
+    setDownvotedPostIds(prev => {
+      const next = new Set(prev);
+      if (isDownvoted) next.delete(post.id);
+      else next.add(post.id);
+      return next;
+    });
+
+    if (!isDownvoted && isUpvoted) {
+      setUpvotedPostIds(prev => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+    }
+
     try {
-      const isDownvoted = downvotedPostIds.has(post.id);
       if (isDownvoted) {
         const downvoteId = downvoteMap[post.id];
         if (downvoteId) await deleteDoc(doc(db, 'post_downvotes', downvoteId));
@@ -903,6 +972,20 @@ export default function Feed() {
         });
       }
     } catch (e) {
+      // Revert optimistic update
+      setDownvotedPostIds(prev => {
+        const next = new Set(prev);
+        if (isDownvoted) next.add(post.id);
+        else next.delete(post.id);
+        return next;
+      });
+      if (!isDownvoted && isUpvoted) {
+        setUpvotedPostIds(prev => {
+          const next = new Set(prev);
+          next.add(post.id);
+          return next;
+        });
+      }
       handleFirestoreError(e, OperationType.UPDATE, 'posts');
     }
   };
@@ -916,8 +999,17 @@ export default function Feed() {
       showToast('You must be verified to like.', 'error');
       return;
     }
+    const isUpvoted = replyUpvotedIds.has(replyId);
+
+    // Optimistic UI update
+    setReplyUpvotedIds(prev => {
+      const next = new Set(prev);
+      if (isUpvoted) next.delete(replyId);
+      else next.add(replyId);
+      return next;
+    });
+
     try {
-      const isUpvoted = replyUpvotedIds.has(replyId);
       const reply = replies.find(r => r.id === replyId);
       if (!reply) return;
 
@@ -939,6 +1031,13 @@ export default function Feed() {
         });
       }
     } catch (e) {
+      // Revert optimistic update
+      setReplyUpvotedIds(prev => {
+        const next = new Set(prev);
+        if (isUpvoted) next.add(replyId);
+        else next.delete(replyId);
+        return next;
+      });
       handleFirestoreError(e, OperationType.UPDATE, 'post_replies');
     }
   };
@@ -978,6 +1077,17 @@ export default function Feed() {
       await updateDoc(postRef, {
         repliesCount: (selectedPost.repliesCount || 0) + 1
       });
+
+      // Send notification to post author
+      if (selectedPost.authorId !== user.uid) {
+        createNotification({
+          userId: selectedPost.authorId,
+          type: 'new_message',
+          title: 'New Comment',
+          message: `${userData?.name || user.email?.split('@')[0]} commented on your post`,
+          link: `/post/${selectedPost.id}`
+        });
+      }
       
       if (replyingTo) {
         const parentReplyRef = doc(db, 'post_replies', replyingTo.id);
@@ -987,6 +1097,17 @@ export default function Feed() {
             repliesCount: (parentReply.repliesCount || 0) + 1,
             updatedAt: serverTimestamp()
           });
+
+          // Send notification to parent reply author
+          if (parentReply.authorId !== user.uid) {
+            createNotification({
+              userId: parentReply.authorId,
+              type: 'new_message',
+              title: 'New Reply',
+              message: `${userData?.name || user.email?.split('@')[0]} replied to your comment`,
+              link: `/post/${selectedPost.id}`
+            });
+          }
         }
       }
 
