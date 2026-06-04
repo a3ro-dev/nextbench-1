@@ -14,9 +14,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const needsUsername = !!(userData && userData.verified && !userData.username);
   const isClubPage = location.pathname.startsWith('/club');
+  const isMessagesPage = location.pathname.startsWith('/messages');
+  const isCollapsedLeftNav = isClubPage || isMessagesPage;
 
   return (
-    <div className="min-h-screen bg-surface-base font-sans text-luxury-ink relative">
+    <div className={`${isMessagesPage ? 'h-[100dvh] overflow-hidden flex flex-col' : 'min-h-screen'} bg-surface-base font-sans text-luxury-ink relative`}>
       {userData && !userData.verified && (
         <div className="bg-brand-teal text-white px-4 py-3 text-center text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-3 z-50 relative">
           <ShieldAlert size={16} />
@@ -28,35 +30,37 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       )}
       
       <MobileHeader />
-      {/* Full-width Layout to snap options to left corner */}
-      <div className="w-full flex relative z-10">
+      
+      {/* Centered Layout Container */}
+      <div className={`w-full flex justify-center relative z-10 ${isMessagesPage ? 'flex-1 min-h-0' : ''}`}>
         
-        {/* Left Sidebar (snapped to left edge) */}
-        <div className={`hidden md:block shrink-0 border-r transition-all duration-300 ${
-          isClubPage ? 'w-72px' : 'w-72px xl:w-240px'
-        }`} style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
-          <SidebarNav />
-        </div>
+        {/* Main Content Wrapper restricted to 1350px */}
+        <div className={`flex w-full max-w-[1350px] min-w-0 ${isMessagesPage ? 'h-full' : ''}`}>
+          
+          {/* Left Sidebar (Now next to middle content) */}
+          <div className={`hidden md:block shrink-0 border-r transition-all duration-300 relative z-50 ${
+            isCollapsedLeftNav ? 'w-[72px]' : 'w-[72px] xl:w-[240px]'
+          } ${isMessagesPage ? 'h-full' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
+            <SidebarNav />
+          </div>
 
-        {/* Center the rest of the content (Main + Right Sidebar) in the remaining space */}
-        <div className="flex-1 flex justify-center min-w-0">
-          <div className="flex w-full max-w-1050px min-w-0">
-            {/* Center Main Content */}
-            <main className="flex-1 min-w-0 md:border-r pb-20 md:pb-0" style={{ borderColor: 'var(--color-border)' }}>
-              {children}
-            </main>
+          {/* Center Main Content */}
+          <main className={`flex-1 min-w-0 md:border-r pb-20 md:pb-0 ${isMessagesPage ? 'flex flex-col relative h-full' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
+            {children}
+          </main>
 
-            {/* Right Sidebar (hidden on mobile and tablet) */}
-            <div className="hidden xl:block w-[300px] shrink-0">
+          {/* Right Sidebar (hidden on mobile and tablet) */}
+          {!isMessagesPage && (
+            <div className="hidden lg:block w-[320px] xl:w-[380px] shrink-0">
               <SuggestedUsers />
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Bottom Nav for Mobile */}
       <BottomNav />
-      <RightSidebarDrawer /> 
+      <RightSidebarDrawer />
       
       {needsUsername && <UsernameSetup isOpen={true} mandatory={true} onClose={() => {}} />}
     </div>
