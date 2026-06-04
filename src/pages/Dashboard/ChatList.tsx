@@ -12,6 +12,7 @@ import { useScrollLock } from '../../hooks/useScrollLock';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { useUserClubs, createClub, type ClubData } from '../../lib/clubs';
 import { useToast } from '../../lib/ToastContext';
+import { getPresenceFromData, usePresenceMap } from '../../lib/presence';
 
 interface ChatRoom {
   id: string;
@@ -85,7 +86,8 @@ export default function ChatList() {
           const fetchPromises = Array.from(uncachedUserIds).map(async (userId) => {
             const uDoc = await getDoc(doc(db, 'users', userId));
             if (uDoc.exists()) {
-              userCache[userId] = { id: userId, ...uDoc.data() };
+              const { id: _id, ...userData } = uDoc.data() as any;
+              userCache[userId] = { id: uDoc.id, ...userData };
             } else {
               userCache[userId] = { id: userId, name: 'Deleted User' };
             }
@@ -99,7 +101,8 @@ export default function ChatList() {
           const otherUserId = data.participants.find(id => id !== user.uid);
           
           if (otherUserId) {
-            rooms.push({ id: roomDoc.id, ...data, otherUser: userCache[otherUserId] });
+            const { id: _rid, ...roomFields } = data as any;
+            rooms.push({ id: roomDoc.id, ...roomFields, otherUser: userCache[otherUserId] });
           }
         }
         
@@ -245,15 +248,22 @@ export default function ChatList() {
       if (term) return (room.otherUser?.name?.toLowerCase() || '').includes(term);
     } else {
       const club = item.data as ClubData;
-      if (term) return club.name.toLowerCase().includes(term);
-    }
-    return true;
-  });
+        if (term) return club.name.toLowerCase().includes(term);
+        }
+        return true;
+      });
+
+    const dmUids = [...new Set(
+        chatRooms
+          .map(r => r.participants.find(id => id !== user?.uid))
+          .filter(Boolean) as string[]
+      )];
+      const presenceMap = usePresenceMap(dmUids);
 
   return (
     <div className="pb-20 max-w-2xl mx-auto min-h-screen">
       {/* Header and Tabs */}
-      <div className="sticky top-0 z-40 px-4 md:px-0 pt-6 pb-0 border-b border-luxury-ink/5 bg-surface-base z-10">
+      <div className="sticky top-0 z-40 px-4 md:px-0 pt-6 pb-0 border-b border-luxury-ink/5 bg-surface-base">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-luxury-ink">
             Messages
@@ -324,6 +334,16 @@ export default function ChatList() {
                           <ShieldCheck size={10} />
                         </div>
                       )}
+                      {(() => {
+                        const otherUid = room.participants.find(id => id !== user?.uid);
+                        const p = otherUid ? (presenceMap[otherUid] ?? getPresenceFromData(room.otherUser)) : null;
+                        if (!p || p.status === 'offline') return null;
+                        return (
+                          <span className={`absolute top-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-surface-base ${
+                            p.status === 'online' ? 'bg-emerald-400' : 'bg-amber-400'
+                          }`} />
+                        );
+                      })()}
                     </div>
 
                     <div className="flex-1 min-w-0 py-1 border-b border-luxury-ink/5 group-hover:border-transparent transition-colors">
@@ -358,7 +378,7 @@ export default function ChatList() {
                 >
                   <div className="flex items-center gap-4 py-3 group-hover:bg-surface-soft rounded-2xl px-2 transition-colors cursor-pointer">
                     <div className="relative shrink-0">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-brand-teal/15 to-brand-pink/15 flex items-center justify-center overflow-hidden border border-luxury-ink/5">
+                      <div className="w-14 h-14 rounded-xl bg-linear-to-br from-brand-teal/15 to-brand-pink/15 flex items-center justify-center overflow-hidden border border-luxury-ink/5">
                         {club.avatar ? (
                           <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
@@ -410,7 +430,7 @@ export default function ChatList() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
             onClick={() => { setShowNewDM(false); setSearchUsers(''); }}
           >
             <motion.div
@@ -511,7 +531,7 @@ export default function ChatList() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-luxury-ink/20 backdrop-blur-sm"
             onClick={() => setShowCreateClub(false)}
           >
             <motion.div
