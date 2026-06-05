@@ -464,20 +464,27 @@ export default function Feed() {
   const postIdFromUrl = searchParams.get('postId');
   
   useEffect(() => {
-    if (postIdFromUrl && rawPosts.length > 0 && !selectedPost) {
-      const p = rawPosts.find(p => p.id === postIdFromUrl);
-      if (p) {
-        setSelectedPost(p);
-      } else {
-        getDoc(doc(db, 'posts', postIdFromUrl)).then(snap => {
-          if (snap.exists()) setSelectedPost({ id: snap.id, ...snap.data() } as Post);
-        });
-      }
-      // Remove query param to clean up url
-      searchParams.delete('postId');
-      setSearchParams(searchParams);
+    if (!postIdFromUrl) return;
+
+    // Clear the query param immediately so it doesn't re-trigger
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('postId');
+    setSearchParams(newParams, { replace: true });
+
+    // Try to find the post locally first
+    const localPost = rawPosts.find(p => p.id === postIdFromUrl);
+    if (localPost) {
+      setSelectedPost(localPost);
+      return;
     }
-  }, [postIdFromUrl, rawPosts, selectedPost, setSearchParams, searchParams]);
+
+    // Not in local feed — fetch directly from Firestore
+    getDoc(doc(db, 'posts', postIdFromUrl)).then(snap => {
+      if (snap.exists()) {
+        setSelectedPost({ id: snap.id, ...snap.data() } as Post);
+      }
+    });
+  }, [postIdFromUrl]);
   
   // Confession state
   const [isAnonymous, setIsAnonymous] = useState(false);
