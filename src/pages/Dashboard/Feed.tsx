@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings } from 'lucide-react';
+import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3 } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
@@ -11,11 +11,13 @@ import { uploadPostImage } from '../../lib/storage';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { useFollowingIds } from '../../lib/follows';
 import { isTextSafe } from '../../lib/moderation';
+import { checkAllImagesSafety, preloadModerationModel } from '../../lib/imageModeration';
 import { createNotification } from '../../lib/notifications';
 import { Link, useSearchParams } from 'react-router-dom';
 import ImageCropper from '../../components/ui/ImageCropper';
 import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
+import PollDisplay from '../../components/ui/PollDisplay';
 import { useScrollLock } from '../../hooks/useScrollLock';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { getPersonaDisplay } from '../../lib/confessions';
@@ -46,6 +48,11 @@ interface Post {
   downvotesCount?: number;
   repliesCount: number;
   feedScore?: number;
+  poll?: {
+    choices: string[];
+    expiresAt: any;
+    votes: Record<string, number>;
+  };
 }
 
 interface Product {
@@ -221,7 +228,7 @@ function PostDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 backdrop-blur-md"
+      className="fixed inset-0 z-100 flex items-center justify-center p-0 sm:p-4 backdrop-blur-md"
       style={{ background: 'var(--color-overlay-heavy)' }}
       onClick={onClose}
     >
@@ -243,7 +250,7 @@ function PostDetailModal({
           {/* Author */}
           <div className="flex items-center gap-3 mb-5">
             <Link to={displayInfo.isAnonymous ? '#' : `/profile/${post.authorId}`} onClick={displayInfo.isAnonymous ? (e) => { e.preventDefault(); /* showToast handle here */ } : onClose} className={`shrink-0 ${displayInfo.isAnonymous ? 'cursor-pointer' : ''}`}>
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-serif overflow-hidden border-2 border-white shadow-sm ${displayInfo.isAnonymous ? 'bg-gradient-to-br from-purple-500/20 to-blue-500/20 text-purple-600' : 'bg-brand-pink/10 text-brand-pink'}`}>
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-serif overflow-hidden border-2 border-white shadow-sm ${displayInfo.isAnonymous ? 'bg-linear-to-br from-purple-500/20 to-blue-500/20 text-purple-600' : 'bg-brand-pink/10 text-brand-pink'}`}>
                 {!displayInfo.isAnonymous && post.authorProfilePicture ? (
                   <img src={getOptimizedImageUrl(post.authorProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : displayInfo.name[0]?.toUpperCase()}
@@ -279,7 +286,12 @@ function PostDetailModal({
 
           {/* Title & Content */}
           <h2 className="text-xl sm:text-2xl font-bold text-luxury-ink mb-3 leading-tight">{post.title}</h2>
-          <p className="text-luxury-ink/70 leading-relaxed whitespace-pre-wrap break-words text-[15px] mb-6">{post.content}</p>
+          <p className="text-luxury-ink/70 leading-relaxed whitespace-pre-wrap wrap-break-word text-[15px] mb-6">{post.content}</p>
+
+          {/* Poll */}
+          {post.poll && post.poll.choices?.length > 0 && (
+            <PollDisplay postId={post.id} poll={post.poll} />
+          )}
 
           {/* Image Section Moved Here */}
           {postImageUrls.length > 0 && (
@@ -376,7 +388,7 @@ function PostDetailModal({
                     <Heart size={20} className={hasUpvoted ? 'fill-brand-pink' : ''} />
                     {post.upvotesCount || 0}
                   </button>
-                  <div className="w-[1px] h-6 bg-luxury-ink/10"></div>
+                  <div className="w-1px h-6 bg-luxury-ink/10"></div>
                   <button
                     onClick={() => onDownvote(post)}
                     className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold transition-all ${hasDownvoted ? 'bg-indigo-500/10 text-indigo-500' : 'hover:bg-white text-luxury-ink/40 hover:text-indigo-500'}`}
@@ -426,6 +438,7 @@ export default function Feed() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingStatus, setSubmittingStatus] = useState('Posting...');
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace'>('all');
 
   // Image cropper state
@@ -464,24 +477,38 @@ export default function Feed() {
   const postIdFromUrl = searchParams.get('postId');
   
   useEffect(() => {
-    if (postIdFromUrl && rawPosts.length > 0 && !selectedPost) {
-      const p = rawPosts.find(p => p.id === postIdFromUrl);
-      if (p) {
-        setSelectedPost(p);
-      } else {
-        getDoc(doc(db, 'posts', postIdFromUrl)).then(snap => {
-          if (snap.exists()) setSelectedPost({ id: snap.id, ...snap.data() } as Post);
-        });
-      }
-      // Remove query param to clean up url
-      searchParams.delete('postId');
-      setSearchParams(searchParams);
+    if (!postIdFromUrl) return;
+
+    // Clear the query param immediately so it doesn't re-trigger
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('postId');
+    setSearchParams(newParams, { replace: true });
+
+    // Try to find the post locally first
+    const localPost = rawPosts.find(p => p.id === postIdFromUrl);
+    if (localPost) {
+      setSelectedPost(localPost);
+      return;
     }
-  }, [postIdFromUrl, rawPosts, selectedPost, setSearchParams, searchParams]);
+
+    // Not in local feed — fetch directly from Firestore
+    getDoc(doc(db, 'posts', postIdFromUrl)).then(snap => {
+      if (snap.exists()) {
+        setSelectedPost({ id: snap.id, ...snap.data() } as Post);
+      }
+    });
+  }, [postIdFromUrl]);
   
   // Confession state
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [selectedPostType, setSelectedPostType] = useState('info');
+
+  // Poll state
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollChoices, setPollChoices] = useState<string[]>(['', '']);
+  const [pollDays, setPollDays] = useState(1);
+  const [pollHours, setPollHours] = useState(0);
+  const [pollMinutes, setPollMinutes] = useState(0);
 
   // Firestore listener — stable subscription, no dependency on followingIds/friendIds.
   // This listener only fires when Firestore posts actually change,
@@ -794,13 +821,26 @@ export default function Feed() {
     try {
       let imageUrls: string[] = [];
       if (imageFiles.length > 0) {
+        setSubmittingStatus('Uploading images...');
         imageUrls = await Promise.all(imageFiles.map(file => uploadPostImage(file)));
       }
 
-      const isTextOnly = imageUrls.length === 0;
-      const isClean = isTextSafe(title) && isTextSafe(content);
-      const shouldAutoApprove = isTextOnly && isClean;
+      const isTextClean = isTextSafe(title) && isTextSafe(content);
+      let areImagesSafe = true;
+
+      if (imageUrls.length > 0 && isTextClean) {
+        // Only run NSFW scan if text is already clean (otherwise post goes to pending anyway)
+        setSubmittingStatus('Scanning images for safety...');
+        const moderationResult = await checkAllImagesSafety(imageFiles);
+        areImagesSafe = moderationResult.isSafe;
+        if (!areImagesSafe) {
+          console.log('[Feed] Image flagged:', moderationResult.reason);
+        }
+      }
+
+      const shouldAutoApprove = isTextClean && areImagesSafe;
       const initialStatus = shouldAutoApprove ? 'approved' : 'pending';
+      setSubmittingStatus('Publishing...');
 
       await addDoc(collection(db, 'posts'), {
         title,
@@ -819,6 +859,13 @@ export default function Feed() {
         imageUrls,
         upvotesCount: 0,
         repliesCount: 0,
+        ...(showPollCreator && pollChoices.filter(c => c.trim()).length >= 2 ? {
+          poll: {
+            choices: pollChoices.filter(c => c.trim()),
+            expiresAt: new Date(Date.now() + (pollDays * 86400000) + (pollHours * 3600000) + (pollMinutes * 60000)),
+            votes: {},
+          }
+        } : {}),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -842,8 +889,10 @@ export default function Feed() {
           });
         }
       } else {
-        if (!isClean && isTextOnly) {
+        if (!isTextClean) {
           showToast('Post flagged for containing sensitive words. Submitted for review.', 'warning');
+        } else if (!areImagesSafe) {
+          showToast('Image flagged by safety check. Submitted for manual review.', 'warning');
         } else {
           showToast('Post submitted for approval!', 'success');
         }
@@ -854,6 +903,11 @@ export default function Feed() {
       setPendingFiles([]);
       setIsAnonymous(false);
       setSelectedPostType('info');
+      setShowPollCreator(false);
+      setPollChoices(['', '']);
+      setPollDays(1);
+      setPollHours(0);
+      setPollMinutes(0);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'posts');
     } finally {
@@ -1308,7 +1362,7 @@ export default function Feed() {
             )}
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => { setIsModalOpen(true); preloadModerationModel(); }}
             className="flex-1 text-left px-4 py-2.5 rounded-full border text-sm text-luxury-ink/40 hover:bg-surface-soft transition-colors"
             style={{ borderColor: 'var(--color-border)' }}
           >
@@ -1320,7 +1374,7 @@ export default function Feed() {
       {/* Floating Action Button for Mobile */}
       {user && userData?.verified && (
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setIsModalOpen(true); preloadModerationModel(); }}
           className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
         >
           <Plus size={24} />
@@ -1446,7 +1500,7 @@ export default function Feed() {
                 setPendingFiles([]);
               }
             }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            className="fixed inset-0 z-100 flex items-center justify-center p-0 sm:p-4 bg-luxury-ink/20 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1455,6 +1509,33 @@ export default function Feed() {
               onClick={(e) => e.stopPropagation()}
               className="bg-surface-card w-full h-full sm:h-auto sm:rounded-3xl sm:max-w-2xl relative shadow-2xl overflow-hidden sm:max-h-[90vh] flex flex-col"
             >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSubmitting) return;
+                  const form = document.getElementById('create-post-form') as HTMLFormElement;
+                  const titleNode = form?.elements.namedItem('title') as HTMLInputElement;
+                  const contentNode = form?.elements.namedItem('content') as HTMLTextAreaElement;
+                  const title = titleNode?.value || '';
+                  const content = contentNode?.value || '';
+                  if (title.trim() || content.trim() || imageFiles.length > 0) {
+                    if (window.confirm('Discard your post?')) {
+                      setIsModalOpen(false);
+                      setImageFiles([]);
+                      setPendingFiles([]);
+                    }
+                  } else {
+                    setIsModalOpen(false);
+                    setImageFiles([]);
+                    setPendingFiles([]);
+                  }
+                }}
+                className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-luxury-ink/10 hover:bg-luxury-ink/20 text-luxury-ink/50 hover:text-luxury-ink/80 transition-all"
+              >
+                <X size={16} />
+              </button>
+
               {/* Full-Screen Loading Overlay inside Modal */}
               <AnimatePresence>
                 {isSubmitting && (
@@ -1465,13 +1546,13 @@ export default function Feed() {
                     className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center"
                   >
                     <div className="w-12 h-12 border-4 border-brand-teal border-t-transparent rounded-full animate-spin mb-4" />
-                    <p className="text-luxury-ink font-bold text-lg">Posting...</p>
-                    <p className="text-luxury-ink/50 text-sm mt-1">Uploading media and publishing to community</p>
+                    <p className="text-luxury-ink font-bold text-lg">{submittingStatus}</p>
+                    <p className="text-luxury-ink/50 text-sm mt-1">{submittingStatus === 'Scanning images for safety...' ? 'AI is checking your images — this only takes a moment' : 'Uploading media and publishing to community'}</p>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <div className="p-6 md:p-8 overflow-y-visible flex-1 min-h-[60vh] flex flex-col">
+              <div className="p-6 md:p-8 overflow-y-auto flex-1 flex flex-col min-h-0">
                 <form id="create-post-form" onSubmit={handleCreatePost} className="flex flex-col h-full relative flex-1">
                   <input type="hidden" name="type" value={selectedPostType} />
                   <input type="hidden" name="privacy" value={privacy} />
@@ -1502,7 +1583,7 @@ export default function Feed() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar px-1 flex flex-col">
+                  <div className="space-y-4 flex-1 px-1 flex flex-col">
                     <input
                       name="title"
                       type="text"
@@ -1515,8 +1596,84 @@ export default function Feed() {
                       name="content"
                       required
                       placeholder="What's on your mind?"
-                      className="w-full flex-1 bg-transparent text-[16px] leading-relaxed text-luxury-ink/80 placeholder-luxury-ink/40 focus:outline-none resize-none min-h-[200px]"
+                      className="w-full flex-1 bg-transparent text-[16px] leading-relaxed text-luxury-ink/80 placeholder-luxury-ink/40 focus:outline-none resize-none min-h-200px"
                     ></textarea>
+
+                    {/* Poll Creator */}
+                    {showPollCreator && (
+                      <div className="mx-1 mb-4 p-4 rounded-2xl border border-luxury-ink/10 bg-surface-base/50">
+                        <div className="space-y-3 mb-4">
+                          {pollChoices.map((choice, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-luxury-ink/5 flex items-center justify-center shrink-0">
+                                <BarChart3 size={14} className="text-luxury-ink/30" />
+                              </div>
+                              <input
+                                type="text"
+                                value={choice}
+                                onChange={(e) => {
+                                  const newChoices = [...pollChoices];
+                                  newChoices[i] = e.target.value;
+                                  setPollChoices(newChoices);
+                                }}
+                                placeholder={`Choice ${i + 1}`}
+                                maxLength={25}
+                                className="flex-1 bg-transparent border border-luxury-ink/10 rounded-xl px-3 py-2 text-sm font-medium text-luxury-ink placeholder-luxury-ink/30 focus:outline-none focus:border-brand-teal transition-colors"
+                              />
+                              <span className="text-[11px] text-luxury-ink/30 font-mono shrink-0">{choice.length}/25</span>
+                              {pollChoices.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPollChoices(pollChoices.filter((_, j) => j !== i))}
+                                  className="p-1 text-luxury-ink/30 hover:text-red-500 transition-colors"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {pollChoices.length < 4 && (
+                          <button
+                            type="button"
+                            onClick={() => setPollChoices([...pollChoices, ''])}
+                            className="flex items-center gap-2 text-[13px] font-semibold text-brand-teal hover:text-brand-teal/80 transition-colors mb-4"
+                          >
+                            <Plus size={14} /> Add choice
+                          </button>
+                        )}
+                        <div className="border-t border-luxury-ink/5 pt-4">
+                          <p className="text-[12px] font-bold text-luxury-ink/50 mb-3">Poll length</p>
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-luxury-ink/40 font-semibold">Days</label>
+                              <select value={pollDays} onChange={(e) => setPollDays(Number(e.target.value))} className="w-full mt-1 bg-surface-card border border-luxury-ink/10 rounded-xl px-3 py-2 text-sm font-semibold text-luxury-ink focus:outline-none focus:border-brand-teal appearance-none cursor-pointer">
+                                {[0,1,2,3,4,5,6,7].map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-luxury-ink/40 font-semibold">Hours</label>
+                              <select value={pollHours} onChange={(e) => setPollHours(Number(e.target.value))} className="w-full mt-1 bg-surface-card border border-luxury-ink/10 rounded-xl px-3 py-2 text-sm font-semibold text-luxury-ink focus:outline-none focus:border-brand-teal appearance-none cursor-pointer">
+                                {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-luxury-ink/40 font-semibold">Minutes</label>
+                              <select value={pollMinutes} onChange={(e) => setPollMinutes(Number(e.target.value))} className="w-full mt-1 bg-surface-card border border-luxury-ink/10 rounded-xl px-3 py-2 text-sm font-semibold text-luxury-ink focus:outline-none focus:border-brand-teal appearance-none cursor-pointer">
+                                {[0,5,10,15,20,25,30,45].map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setShowPollCreator(false); setPollChoices(['', '']); }}
+                          className="mt-4 w-full text-center text-[13px] font-semibold text-red-400 hover:text-red-500 transition-colors"
+                        >
+                          Remove poll
+                        </button>
+                      </div>
+                    )}
 
                     {/* Image Previews */}
                     {imageFiles.length > 0 && (
@@ -1540,7 +1697,7 @@ export default function Feed() {
                   </div>
 
                   {/* Bottom Toolbar */}
-                  <div className="mt-4 pt-4 border-t border-luxury-ink/5 flex flex-wrap items-center justify-between gap-y-3 relative px-1">
+                  <div className="mt-4 pt-4 border-t border-luxury-ink/5 flex flex-wrap items-center justify-between gap-y-3 relative px-1 bottom-0 bg-surface-card pb-2">
                     <div className="flex items-center gap-1 relative">
                       <label className="p-2.5 rounded-full hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal transition-colors cursor-pointer group relative">
                         <ImageIcon size={22} />
@@ -1557,6 +1714,14 @@ export default function Feed() {
                         />
                         <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-luxury-ink text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Add Image</span>
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPollCreator(!showPollCreator)}
+                        className={`p-2.5 rounded-full transition-colors group relative ${showPollCreator ? 'bg-brand-teal/10 text-brand-teal' : 'hover:bg-surface-soft text-luxury-ink/50 hover:text-brand-teal'}`}
+                      >
+                        <BarChart3 size={22} />
+                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-luxury-ink text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Add Poll</span>
+                      </button>
 
                       <div className="relative">
                         <button
@@ -1699,9 +1864,9 @@ function HorizontalDiscoverClubs() {
   if (loading || clubs.length === 0) return null;
 
   return (
-    <div className="py-8 my-2 border-y border-luxury-ink/5 bg-gradient-to-r from-surface-soft/40 via-transparent to-surface-soft/40 px-4 sm:px-0 relative overflow-hidden">
+    <div className="py-8 my-2 border-y border-luxury-ink/5 bg-linear-to-r from-surface-soft/40 via-transparent to-surface-soft/40 px-4 sm:px-0 relative overflow-hidden">
       {/* Subtle decorative glow */}
-      <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-brand-teal/20 to-transparent"></div>
+      <div className="absolute top-0 left-1/4 w-1/2 h-px bg-linear-to-r from-transparent via-brand-teal/20 to-transparent"></div>
       
       <div className="flex items-center justify-between mb-6 px-2">
         <div className="flex flex-col">
@@ -1718,7 +1883,7 @@ function HorizontalDiscoverClubs() {
           <Link 
             key={club.id} 
             to={`/club/${club.id}`} 
-            className="snap-start flex-shrink-0 w-[160px] bg-surface-card/70 backdrop-blur-sm rounded-2xl p-4 border border-luxury-ink/5 hover:border-brand-teal/20 transition-all group flex flex-col items-center text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1"
+            className="snap-start shrink-0 w-160px bg-surface-card/70 backdrop-blur-sm rounded-2xl p-4 border border-luxury-ink/5 hover:border-brand-teal/20 transition-all group flex flex-col items-center text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1"
           >
             <div className="w-16 h-16 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden mb-3 border-[3px] border-surface-card shadow-sm ring-1 ring-luxury-ink/5">
               {club.avatar ? (
