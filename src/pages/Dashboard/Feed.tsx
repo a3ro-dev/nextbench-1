@@ -842,7 +842,7 @@ export default function Feed() {
       const initialStatus = shouldAutoApprove ? 'approved' : 'pending';
       setSubmittingStatus('Publishing...');
 
-      await addDoc(collection(db, 'posts'), {
+      const postDocRef = await addDoc(collection(db, 'posts'), {
         title,
         content,
         type,
@@ -884,7 +884,8 @@ export default function Feed() {
               type: 'new_message', 
               title: 'New Post', 
               message: `${authorName} just posted: "${title}"`, 
-              link: `/dashboard` 
+              link: `/dashboard`,
+              postId: postDocRef.id
             });
           });
         }
@@ -1164,7 +1165,8 @@ export default function Feed() {
           type: 'new_message',
           title: 'New Comment',
           message: `${userData?.name || user.email?.split('@')[0]} commented on your post`,
-          link: `/post/${selectedPost.id}`
+          link: `/post/${selectedPost.id}`,
+          postId: selectedPost.id
         });
       }
       
@@ -1184,7 +1186,8 @@ export default function Feed() {
               type: 'new_message',
               title: 'New Reply',
               message: `${userData?.name || user.email?.split('@')[0]} replied to your comment`,
-              link: `/post/${selectedPost.id}`
+              link: `/post/${selectedPost.id}`,
+              postId: selectedPost.id
             });
           }
         }
@@ -1258,6 +1261,10 @@ export default function Feed() {
       const reactionsQ = query(collection(db, 'post_reactions'), where('postId', '==', postId));
       const reactionsSnap = await getDocs(reactionsQ);
       reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
+
+      const notificationsQ = query(collection(db, 'notifications'), where('postId', '==', postId));
+      const notificationsSnap = await getDocs(notificationsQ);
+      notificationsSnap.forEach(docSnap => batch.delete(docSnap.ref));
       
       batch.delete(doc(db, 'posts', postId));
       

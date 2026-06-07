@@ -13,13 +13,14 @@ interface CreateNotificationParams {
   title: string;
   message: string;
   link?: string;
+  postId?: string;
 }
 
 /**
  * Creates a notification document in Firestore.
  * Called after key actions like approvals, messages, etc.
  */
-export async function createNotification({ userId, type, title, message, link }: CreateNotificationParams) {
+export async function createNotification({ userId, type, title, message, link, postId }: CreateNotificationParams) {
   try {
     await addDoc(collection(db, 'notifications'), {
       userId,
@@ -27,6 +28,7 @@ export async function createNotification({ userId, type, title, message, link }:
       title,
       message,
       link: link || null,
+      postId: postId || null,
       read: false,
       createdAt: serverTimestamp(),
     });
