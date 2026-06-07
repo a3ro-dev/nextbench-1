@@ -35,6 +35,7 @@ const TermsPage     = lazyWithRetry(() => import('./pages/Legal/TermsPage'));
 const PrivacyPage   = lazyWithRetry(() => import('./pages/Legal/PrivacyPage'));
 const CareersPage   = lazyWithRetry(() => import('./pages/Legal/CareersPage'));
 const UsernameProfile = lazyWithRetry(() => import('./pages/Dashboard/UsernameProfile'));
+const NotFound      = lazyWithRetry(() => import('./pages/NotFound'));
 
 function PageLoader() {
   return (
@@ -133,7 +134,7 @@ export default function App() {
               <Route path="/u/:username" element={<ProtectedRoute requireAuth><UsernameProfile /></ProtectedRoute>} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </div>
