@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { collection, query, getDocs, limit, where, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, limit, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Search as SearchIcon, Users, Grid3X3, Package, ArrowRight, Globe } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -26,6 +26,18 @@ export default function Search() {
   const [products, setProducts] = useState<any[]>([]);
   const [clubs, setClubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'post_upvotes'), where('userId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const ids = new Set<string>();
+      snap.forEach(d => ids.add(d.data().postId));
+      setUpvotedPostIds(ids);
+    });
+    return () => unsub();
+  }, [user]);
 
   // Cache for suggestions to avoid re-fetching on empty search
   const [suggestionsFetched, setSuggestionsFetched] = useState(false);
@@ -394,7 +406,7 @@ export default function Search() {
                     <PostCard 
                       key={`search-post-${p.id}`} 
                       post={p as any} 
-                      hasUpvoted={false} 
+                      hasUpvoted={upvotedPostIds.has(p.id)}
                       onClick={() => navigate(`/community?postId=${p.id}`)}
                     />
                   ))}
