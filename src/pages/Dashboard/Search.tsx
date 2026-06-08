@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { collection, query, getDocs, limit, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Search as SearchIcon, Users, Grid3X3, Package, ArrowRight, Globe } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import PostCard from '../../components/ui/PostCard';
 import ProductCard from '../../components/ui/ProductCard';
@@ -19,7 +19,7 @@ export default function Search() {
   const { followingIds } = useFollowingIds();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'posts' | 'products' | 'clubs'>('all');
-  
+  const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -373,7 +373,12 @@ export default function Search() {
                 )}
                 <div className="flex flex-col gap-6 w-full">
                   {(activeTab === 'all' ? posts.slice(0, 3) : posts).map((p) => (
-                    <PostCard key={`search-post-${p.id}`} post={p as any} hasUpvoted={false} onClick={() => {}} />
+                    <PostCard 
+                      key={`search-post-${p.id}`} 
+                      post={p as any} 
+                      hasUpvoted={false} 
+                      onClick={() => navigate(`/community?postId=${p.id}`)}
+                    />
                   ))}
                 </div>
               </motion.div>
