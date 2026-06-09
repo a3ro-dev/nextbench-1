@@ -67,6 +67,7 @@ interface Product {
   sellerId: string;
   sellerName: string;
   sellerSchool: string;
+  sellerProfilePicture?: string;
   city?: string;
   createdAt: any;
 }
@@ -229,7 +230,7 @@ function PostDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 backdrop-blur-md"
+      className="fixed inset-0 z-100 flex items-center justify-center p-0 sm:p-4 backdrop-blur-md"
       style={{ background: 'var(--color-overlay-heavy)' }}
       onClick={onClose}
     >
@@ -626,6 +627,7 @@ export default function Feed() {
             ...data,
             sellerName: data.sellerName || 'Unknown User',
             sellerSchool: data.sellerSchool || 'Unknown School',
+            sellerProfilePicture: data.sellerProfilePicture || null,
           } as Product);
         });
 
@@ -1216,7 +1218,7 @@ export default function Feed() {
         id: post.id,
         title: post.title,
         description: post.content || '',
-        image: post.images?.[0] || undefined,
+        image: post.imageUrls?.[0] || post.imageUrl || undefined,
         authorName: post.authorName || 'Unknown User'
       }
     });
@@ -1507,7 +1509,7 @@ export default function Feed() {
                 setPendingFiles([]);
               }
             }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-luxury-ink/20 backdrop-blur-sm"
+            className="fixed inset-0 z-100 flex items-center justify-center p-0 sm:p-4 bg-luxury-ink/20 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}

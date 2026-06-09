@@ -22,6 +22,7 @@ interface Post {
   reactionsCount?: Record<string, number>;
   school: string;
   type: string;
+  status: string;
   imageUrl?: string;
   imageUrls?: string[];
   upvotesCount: number;
