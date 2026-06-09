@@ -1569,17 +1569,17 @@ export default function Feed() {
                   {/* Top Bar with Avatar */}
                   <div className="flex items-center gap-3 mb-6 px-1">
                     <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm overflow-hidden shrink-0">
-                      {user?.photoURL ? (
-                        <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      {userData?.profilePicture ? (
+                        <img src={getOptimizedImageUrl(userData.profilePicture)} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
-                        userData?.firstName?.[0]?.toUpperCase() || <Users size={16} />
+                        userData?.name?.[0]?.toUpperCase() || <Users size={16} />
                       )}
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[15px] font-semibold text-luxury-ink">
                         {selectedPostType === 'confession' && isAnonymous 
                           ? userData?.anonymousPersonaName || 'Anonymous' 
-                          : (userData?.firstName ? `${userData.firstName} ${userData.lastName || ''}`.trim() : user?.displayName || 'User')}
+                          : (userData?.name || 'User')}
                       </span>
                       {selectedPostType === 'confession' && !isAnonymous && (
                         <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1">
