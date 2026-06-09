@@ -2,7 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { collection, query, getDocs, limit, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Search as SearchIcon, Users, Grid3X3, Package, ArrowRight, Globe } from 'lucide-react';
+import { Search as SearchIcon, Users, Grid3X3, Package, ArrowRight, Globe, Filter, X } from 'lucide-react';
+
+const SCHOOLS = [
+  "Loreto Convent",
+  "La Martinière College",
+  "CMS Gomtinagar - 1",
+  "La Martinière Girls' College",
+  "CMS Cambridge",
+  "St. Francis Lucknow",
+  "Seth M.R. Jaipuria School",
+  "Delhi Public School Jankipuram"
+];
+
+const LOCATIONS = ["Lucknow"];
 import { Link, useNavigate } from 'react-router-dom';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import PostCard from '../../components/ui/PostCard';
@@ -20,6 +33,11 @@ export default function Search() {
   const { followingIds } = useFollowingIds();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'posts' | 'products' | 'clubs'>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedSchool, setSelectedSchool] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [appliedSchool, setAppliedSchool] = useState('');
+  const [appliedLocation, setAppliedLocation] = useState('');
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
@@ -48,8 +66,10 @@ export default function Search() {
 
   // Fetch initial data or perform search
   useEffect(() => {
-    // Show suggestions when search is empty
-    if (!searchQuery.trim()) {
+    const isSearchActive = searchQuery.trim() || appliedSchool || appliedLocation;
+
+    // Show suggestions when search is empty and no filters
+    if (!isSearchActive) {
       if (!suggestionsFetched) {
         // Fetch suggestions only once
         const fetchSuggestions = async () => {
@@ -129,8 +149,12 @@ export default function Search() {
           return;
         }
 
+        const userConstraints: any[] = [];
+        if (appliedSchool) userConstraints.push(where('school', '==', appliedSchool));
+        if (appliedLocation) userConstraints.push(where('city', '==', appliedLocation));
+
         const [usersSnap, postsSnap, productsSnap, clubsSnap] = await Promise.all([
-          getDocs(query(collection(db, 'users'), limit(20))),
+          getDocs(query(collection(db, 'users'), ...userConstraints, limit(100))),
           getDocs(query(collection(db, 'posts'), limit(20))),
           getDocs(query(collection(db, 'products'), limit(20))),
           getDocs(query(collection(db, 'clubs'), where('type', '==', 'public'), limit(20)))
@@ -139,18 +163,22 @@ export default function Search() {
         const lowerQ = searchQuery.toLowerCase();
 
         setUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(u => 
+          !lowerQ || 
           (u.name && u.name.toLowerCase().includes(lowerQ)) || 
           (u.school && u.school.toLowerCase().includes(lowerQ)) ||
           (u.username && u.username.toLowerCase().includes(lowerQ))
         ));
         setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(p => 
+          (!lowerQ || 
           (p.title && p.title.toLowerCase().includes(lowerQ)) || 
           (p.content && p.content.toLowerCase().includes(lowerQ)) ||
-          (p.school && p.school.toLowerCase().includes(lowerQ))
+          (p.school && p.school.toLowerCase().includes(lowerQ))) &&
+          (!appliedSchool || p.school === appliedSchool)
         ));
         setProducts(productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any))
           .filter((p: any) => p.status !== 'sold')
           .filter(p => 
+            !lowerQ || 
             (p.title && p.title.toLowerCase().includes(lowerQ)) || 
             (p.category && p.category.toLowerCase().includes(lowerQ)) ||
             (p.sellerName && p.sellerName.toLowerCase().includes(lowerQ)) ||
@@ -158,10 +186,12 @@ export default function Search() {
           )
         );
         setClubs(clubsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(c => 
+          (!lowerQ || 
           (c.name && c.name.toLowerCase().includes(lowerQ)) || 
           (c.description && c.description.toLowerCase().includes(lowerQ)) ||
           (c.school && c.school.toLowerCase().includes(lowerQ)) ||
-          (c.city && c.city.toLowerCase().includes(lowerQ))
+          (c.city && c.city.toLowerCase().includes(lowerQ))) &&
+          (!appliedSchool || c.school === appliedSchool)
         ));
       } catch (err) {
         console.error('Search error:', err);
@@ -172,10 +202,10 @@ export default function Search() {
 
     const debounceTimer = setTimeout(() => {
       performSearch();
-    }, 400); // 400ms debounce (slightly longer to reduce rapid-fire queries)
+    }, 400); // 400ms debounce
 
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery, suggestionsFetched, suggestedUsers, suggestedPosts, suggestedProducts, suggestedClubs]);
+  }, [searchQuery, appliedSchool, appliedLocation, suggestionsFetched, suggestedUsers, suggestedPosts, suggestedProducts, suggestedClubs]);
 
   const toggleFollow = async (e: React.MouseEvent, targetId: string) => {
     e.preventDefault();
@@ -228,16 +258,42 @@ export default function Search() {
 
       {/* Search Header */}
       <div className="sticky top-0 z-40 nav-glass border-b pt-2 sm:pt-4 pb-4 px-2 sm:px-6 mb-6" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="relative w-full mb-4">
-          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-luxury-ink/40" size={20} />
-          <input
-            type="text"
-            placeholder="Search users, posts, products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-soft border border-luxury-ink/5 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 text-[15px] font-medium transition-all"
-            autoFocus
-          />
+        <div className="flex gap-2 mb-4">
+          <div className="relative flex-1">
+            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-luxury-ink/40" size={20} />
+            <input
+              type="text"
+              placeholder="Search users, posts, products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-surface-soft border border-luxury-ink/5 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 text-[15px] font-medium transition-all"
+              autoFocus
+            />
+          </div>
+          {(appliedSchool || appliedLocation) && (
+            <button
+              onClick={() => {
+                setSelectedSchool('');
+                setSelectedLocation('');
+                setAppliedSchool('');
+                setAppliedLocation('');
+              }}
+              className="shrink-0 flex items-center justify-center p-4 rounded-2xl border bg-surface-soft border-luxury-ink/5 text-luxury-ink/40 hover:text-luxury-ink hover:bg-luxury-ink/5 transition-colors"
+              title="Clear Filters"
+            >
+              <X size={20} />
+            </button>
+          )}
+          <button
+            onClick={() => setShowFilters(true)}
+            className={`shrink-0 flex items-center justify-center p-4 rounded-2xl border transition-colors ${
+              appliedSchool || appliedLocation 
+                ? 'bg-brand-teal text-white border-brand-teal' 
+                : 'bg-surface-soft border-luxury-ink/5 text-luxury-ink hover:bg-luxury-ink/5'
+            }`}
+          >
+            <Filter size={20} />
+          </button>
         </div>
 
         {/* Tabs */}
@@ -431,7 +487,15 @@ export default function Search() {
             )}
 
             {/* Empty States */}
-            {!loading && users.length === 0 && posts.length === 0 && products.length === 0 && clubs.length === 0 && (
+            {!loading && activeTab === 'users' && users.length === 0 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 text-center">
+                <Users size={48} className="mx-auto text-luxury-ink/10 mb-4" />
+                <p className="text-luxury-ink/40 font-serif italic text-xl">No such user exists yet</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-luxury-ink/30 mt-2">Try adjusting your filters or search query</p>
+              </motion.div>
+            )}
+
+            {!loading && activeTab === 'all' && users.length === 0 && posts.length === 0 && products.length === 0 && clubs.length === 0 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 text-center">
                 <SearchIcon size={48} className="mx-auto text-luxury-ink/10 mb-4" />
                 <p className="text-luxury-ink/40 font-serif italic text-xl">No results found for "{searchQuery}"</p>
@@ -442,6 +506,96 @@ export default function Search() {
           </AnimatePresence>
         )}
       </div>
+
+      {/* Filter Modal */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-luxury-ink/20 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-surface-card w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl p-6 sm:p-8 relative shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-luxury-ink">Search Filters</h3>
+                <button 
+                  onClick={() => setShowFilters(false)}
+                  className="p-2 text-luxury-ink/40 hover:text-luxury-ink transition-colors bg-surface-soft rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6 mb-8">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-luxury-ink/50 mb-3">
+                    School
+                  </label>
+                  <select
+                    value={selectedSchool}
+                    onChange={(e) => setSelectedSchool(e.target.value)}
+                    className="w-full bg-surface-soft border border-luxury-ink/5 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 text-[14px] font-medium text-luxury-ink appearance-none"
+                  >
+                    <option value="">Any School</option>
+                    {SCHOOLS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-luxury-ink/50 mb-3">
+                    Location
+                  </label>
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="w-full bg-surface-soft border border-luxury-ink/5 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 text-[14px] font-medium text-luxury-ink appearance-none"
+                  >
+                    <option value="">Any Location</option>
+                    {LOCATIONS.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedSchool('');
+                    setSelectedLocation('');
+                    setAppliedSchool('');
+                    setAppliedLocation('');
+                    setShowFilters(false);
+                  }}
+                  className="flex-1 py-4 bg-surface-soft text-luxury-ink text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-luxury-ink/5 transition-colors"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => {
+                    setAppliedSchool(selectedSchool);
+                    setAppliedLocation(selectedLocation);
+                    setShowFilters(false);
+                    if (activeTab !== 'users') setActiveTab('users'); // Auto-switch to users to show results
+                  }}
+                  className="flex-[2] py-4 bg-brand-teal text-white text-xs font-bold uppercase tracking-[0.1em] rounded-xl shadow-lg shadow-brand-teal/20 hover:bg-brand-teal/90 transition-all active:scale-[0.98]"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
