@@ -1368,13 +1368,16 @@ export default function Feed() {
       const reactionsSnap = await getDocs(reactionsQ);
       reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
 
-      const notificationsQ = query(collection(db, 'notifications'), where('postId', '==', postId));
-      const notificationsSnap = await getDocs(notificationsQ);
-      notificationsSnap.forEach(docSnap => batch.delete(docSnap.ref));
-      
-      batch.delete(doc(db, 'posts', postId));
-      
+      // We do not delete notifications here because it violates security rules 
+      // (some notifications might belong to other users), and standard behavior
+      // is to simply show "Post not found" when clicking an old notification.
+
       await batch.commit();
+
+      // Delete the post separately AFTER the batch. If the post is deleted inside
+      // the batch, the security rules evaluating `get()` for the related documents 
+      // will fail because the post is considered deleted during evaluation.
+      await deleteDoc(doc(db, 'posts', postId));
       
       showToast('Post deleted successfully', 'success');
       setSelectedPost(null);
