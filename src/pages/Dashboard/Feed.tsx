@@ -64,6 +64,7 @@ interface Product {
   category: string;
   condition: string;
   image: string;
+  images?: string[];
   status: string;
   sellerId: string;
   sellerName: string;
