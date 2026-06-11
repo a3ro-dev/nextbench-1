@@ -257,7 +257,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
     }
   };
 
-  // Store file locally → show preview, don't upload yet
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     const file = e.target.files[0];
@@ -273,7 +272,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
     setPendingImagePreview(null);
   };
 
-  // Upload + send on form submit
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pendingImageFile) {
@@ -510,19 +508,38 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
               key={msg.id}
               className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} relative group gap-0.5`}
             >
-              <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} items-center gap-2 w-full`}>
+              {/* ── Bubble row + inline react button ── */}
+              <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} items-center gap-1.5 w-full`}>
+
+                {/* Select checkbox — their side */}
                 {isSelectMode && !isMe && (
                   <button onClick={() => toggleMessageSelection(msg.id)} className="p-2 shrink-0">
                     {isSelected ? <CheckCircle2 className="text-brand-teal" size={20} /> : <Circle className="text-luxury-ink/20" size={20} />}
                   </button>
                 )}
 
+                {/* React button — left of their bubble */}
+                {!isSelectMode && !isDeleted && isMe && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id);
+                      setSelectedMessageId(null);
+                      setMenuPosition(null);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-soft text-luxury-ink/30 hover:text-brand-teal transition-all shrink-0"
+                    title="React"
+                  >
+                    <span className="text-base leading-none">😊</span>
+                  </button>
+                )}
+
+                {/* Message bubble */}
                 <div
                   data-msg-id={msg.id}
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation();
                     if (isSelectMode) { toggleMessageSelection(msg.id); return; }
-                    // Close reaction picker when tapping bubble
                     setActiveReactionMsgId(null);
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     const spaceBelow = window.innerHeight - rect.bottom;
@@ -535,7 +552,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
                   onContextMenu={(e: React.MouseEvent) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    // Long-press / right-click → open reaction quick bar instead of context menu
                     setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id);
                     setSelectedMessageId(null);
                     setMenuPosition(null);
@@ -590,6 +606,23 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
                   </div>
                 </div>
 
+                {/* React button — right of my bubble */}
+                {!isSelectMode && !isDeleted && !isMe && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id);
+                      setSelectedMessageId(null);
+                      setMenuPosition(null);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-soft text-luxury-ink/30 hover:text-brand-teal transition-all shrink-0"
+                    title="React"
+                  >
+                    <span className="text-base leading-none">😊</span>
+                  </button>
+                )}
+
+                {/* Select checkbox — my side */}
                 {isSelectMode && isMe && (
                   <button onClick={() => toggleMessageSelection(msg.id)} className="p-2 shrink-0">
                     {isSelected ? <CheckCircle2 className="text-brand-teal" size={20} /> : <Circle className="text-luxury-ink/20" size={20} />}
@@ -597,7 +630,7 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
                 )}
               </div>
 
-              {/* Reactions row — below bubble, aligned to same side */}
+              {/* Reactions + quick bar — rendered by MessageReactions */}
               {!isDeleted && (
                 <MessageReactions
                   reactions={msg.reactions}
@@ -627,7 +660,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
             style={{ borderColor: 'var(--color-border)', ...menuPosition }}
             onClick={e => e.stopPropagation()}
           >
-            {/* React option at top of context menu */}
             {!isDeleted && (
               <button
                 onClick={(e) => {
@@ -720,7 +752,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
               </div>
             )}
 
-            {/* Image preview */}
             {pendingImagePreview && (
               <div className="mb-2 flex items-center gap-3 bg-surface-card border border-luxury-ink/10 rounded-2xl px-3 py-2 shadow-sm">
                 <div className="relative shrink-0">
@@ -742,7 +773,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
             <form onSubmit={handleSendMessage} className="flex items-center gap-2">
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
 
-              {/* Camera button */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -757,9 +787,7 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
                 )}
               </button>
 
-              {/* Input pill */}
               <div className="flex-1 flex items-center gap-1 bg-surface-card rounded-full border border-luxury-ink/10 shadow-md px-3 relative" style={{ borderColor: 'var(--color-border)' }}>
-                {/* Quick replies */}
                 <button
                   type="button"
                   onClick={() => setShowQuickReplies(!showQuickReplies)}
@@ -800,7 +828,6 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
                 />
               </div>
 
-              {/* Send button */}
               <button
                 type="submit"
                 disabled={(!newMessage.trim() && !pendingImageFile) || isUploading || hasSentPendingMessage}
