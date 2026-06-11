@@ -173,12 +173,35 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         {/* Image */}
         {hasImage && (
           <div className="relative mt-2 mb-6 w-full rounded-[20px] overflow-hidden group bg-black/5">
-            <img
-              src={getOptimizedImageUrl(postImageUrls[currentImageIndex])}
-              alt={post.title || "Post image"}
-              className="w-full h-auto"
-              referrerPolicy="no-referrer"
-            />
+            <motion.div 
+              className="flex w-full items-start"
+              drag={postImageUrls.length > 1 ? "x" : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, { offset }) => {
+                const swipe = offset.x;
+                if (swipe < -50 && currentImageIndex < postImageUrls.length - 1) {
+                  setCurrentImageIndex(prev => prev + 1);
+                } else if (swipe > 50 && currentImageIndex > 0) {
+                  setCurrentImageIndex(prev => prev - 1);
+                }
+              }}
+              animate={{ x: `-${currentImageIndex * 100}%` }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            >
+              {postImageUrls.map((url, idx) => (
+                <div key={idx} className="w-full shrink-0">
+                  <img
+                    src={getOptimizedImageUrl(url)}
+                    alt={post.title || "Post image"}
+                    className="w-full h-auto pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    draggable={false}
+                  />
+                </div>
+              ))}
+            </motion.div>
+
             {postImageUrls.length > 1 && (
               <>
                 <div className="absolute top-3 right-3 bg-luxury-ink/60 backdrop-blur-md text-white px-2.5 py-1 rounded-md text-[11px] font-bold tracking-widest z-10 pointer-events-none">
@@ -188,7 +211,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
                 {/* Navigation arrows */}
                 {currentImageIndex > 0 && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev - 1); }}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCurrentImageIndex(prev => prev - 1); }}
                     className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
                   >
                     <ChevronLeft size={18} />
@@ -196,7 +219,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
                 )}
                 {currentImageIndex < postImageUrls.length - 1 && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev + 1); }}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCurrentImageIndex(prev => prev + 1); }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
                   >
                     <ChevronRight size={18} />
