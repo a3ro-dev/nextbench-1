@@ -3,7 +3,7 @@ import { ShieldCheck, Star, Package, Settings, MapPin, X, Smartphone, ExternalLi
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, collection, query, where, onSnapshot, deleteDoc, getDoc, getDocs, writeBatch, getCountFromServer } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { handleFirestoreError, OperationType } from '../../lib/firestore-errors';
 import { useToast } from '../../lib/ToastContext';
@@ -77,6 +77,7 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
 
   // Invite / Referral
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralCount, setReferralCount] = useState<number>(0);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
@@ -174,6 +175,10 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
         if (docSnap.exists() && docSnap.data().referralCode) {
           setReferralCode(docSnap.data().referralCode);
         }
+        
+        const coll = collection(db, 'users', user.uid, 'referrals');
+        const countSnap = await getCountFromServer(coll);
+        setReferralCount(countSnap.data().count);
       } catch {
         // Non-critical — referral code is optional
       }
@@ -899,8 +904,8 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
             <span className="text-sm text-luxury-ink/50 flex items-center gap-0.5">Reputation <Star size={11} className="text-brand-teal" /></span>
           </div>
         </div>
-        </div>
       </div>
+
 
       {/* ─── Invite Friends Card (own profile only) ───────── */}
       {isOwnProfile && (
@@ -926,6 +931,11 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
                 <div className="min-w-0">
                   <h3 className="text-base font-bold text-luxury-ink mb-0.5">Invite Friends</h3>
                   <p className="text-xs text-luxury-ink/50">Share Nextbench with your campus network</p>
+                  {referralCount > 0 && (
+                    <p className="text-xs font-semibold text-brand-teal mt-1">
+                      {referralCount} {referralCount === 1 ? 'person' : 'people'} joined using your link!
+                    </p>
+                  )}
                 </div>
               </div>
               
