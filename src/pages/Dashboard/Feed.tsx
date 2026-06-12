@@ -1479,7 +1479,25 @@ export default function Feed() {
         title: post.title,
         description: post.content || '',
         image: post.imageUrls?.[0] || post.imageUrl || undefined,
-        authorName: post.authorName || 'Unknown User'
+        authorName: post.authorName || 'Unknown User',
+        kind: 'post',
+      }
+    });
+  };
+
+  const handleShareProduct = (product: Product) => {
+    const url = window.location.origin + '/product/' + product.id;
+    setShareModalData({
+      isOpen: true,
+      url,
+      title: product.title,
+      sharedPost: {
+        id: product.id,
+        title: product.title,
+        description: typeof product.price === 'number' ? `₹${product.price}` : '',
+        image: product.images?.[0] || product.image || undefined,
+        authorName: product.sellerName || 'Unknown User',
+        kind: 'product',
       }
     });
   };
@@ -1671,6 +1689,7 @@ export default function Feed() {
                     product={item as Product} 
                     isWishlisted={wishlisted.has(item.id)} 
                     wishlistDocId={wishlistMap[item.id]} 
+                    onShare={handleShareProduct}
                   />
                 ) : (
                   <PostCard 
