@@ -95,7 +95,7 @@ export function useFollowStatus(targetUserId: string | undefined) {
     });
 
     return () => { unsub1(); unsub2(); };
-  }, [user, targetUserId]);
+  }, [user?.uid, targetUserId]);
 
   const isFriend = isFollowing && isFollowedBy;
 
@@ -127,7 +127,7 @@ export function useFollowCounts(userId: string | undefined) {
     });
 
     return () => { unsub1(); unsub2(); };
-  }, [userId, user]);
+  }, [userId]);
 
   return { followersCount, followingCount };
 }
@@ -202,7 +202,7 @@ export function useMutualFollowers(targetUserId: string | undefined) {
     };
 
     fetchMutuals();
-  }, [user, targetUserId]);
+  }, [user?.uid, targetUserId]);
 
   return mutuals;
 }
@@ -278,7 +278,7 @@ export function useFollowersList(userId: string | undefined) {
       setFollowerIds([]);
     });
     return () => unsub();
-  }, [userId, user]);
+  }, [userId]);
 
   return followerIds;
 }
@@ -299,7 +299,7 @@ export function useFollowingList(userId: string | undefined) {
       setFollowingIds([]);
     });
     return () => unsub();
-  }, [userId, user]);
+  }, [userId]);
 
   return followingIds;
 }
