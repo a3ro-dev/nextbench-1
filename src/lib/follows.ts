@@ -244,7 +244,7 @@ export function useFollowingIds() {
     });
 
     return () => { unsub1(); unsub2(); };
-  }, [user]);
+  }, [user?.uid]);
 
   // CRITICAL: Memoize friendIds so it's a stable reference.
   // Without this, friendIds is a new Set on every render, causing any
