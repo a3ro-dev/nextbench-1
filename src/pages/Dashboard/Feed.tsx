@@ -1629,12 +1629,17 @@ export default function Feed() {
 
   // ─── Filtering (block system) ────────────────────────────
 
-  const filteredPosts = posts.filter(p => {
+  let filteredPosts = posts.filter(p => {
     if (blockedIds.has(p.authorId) || blockedByIds.has(p.authorId)) return false;
     if (p.privacy === 'private' && p.authorId !== user?.uid && !friendIds.has(p.authorId)) return false;
     return true;
   });
-  const filteredProducts = products.filter(p => !blockedIds.has(p.sellerId) && !blockedByIds.has(p.sellerId));
+  let filteredProducts = products.filter(p => !blockedIds.has(p.sellerId) && !blockedByIds.has(p.sellerId));
+
+  if (!user) {
+    filteredPosts = filteredPosts.slice(0, 5);
+    filteredProducts = filteredProducts.slice(0, 5);
+  }
 
   const combinedFeed = useMemo(() => {
     let combined: any[] = [];
@@ -1787,6 +1792,19 @@ export default function Feed() {
               <InfiniteScrollSentinel onVisible={() => setVisibleCount(v => v + 6)} />
             )}
           </div>
+
+          {!user && combinedFeed.length > 0 && visibleCount >= combinedFeed.length && (
+            <div className="py-12 px-6 flex flex-col items-center justify-center text-center border-t mt-4 relative z-10" style={{ borderColor: 'var(--color-border)' }}>
+              <Lock className="w-12 h-12 text-luxury-ink/20 mb-4" />
+              <h3 className="text-xl font-bold text-luxury-ink mb-2">You've reached the end of your preview</h3>
+              <p className="text-luxury-ink/50 text-sm max-w-sm mb-6">
+                Sign up for free to unlock unlimited posts, full marketplace access, and join the community.
+              </p>
+              <Link to="/signup" className="bg-brand-teal text-white px-8 py-3 rounded-xl font-bold hover:bg-brand-teal/90 transition-all hover:scale-105 shadow-xl shadow-brand-teal/20">
+                Register Now
+              </Link>
+            </div>
+          )}
 
           {!loading && combinedFeed.length === 0 && (
             <div className="py-20 text-center px-4">
