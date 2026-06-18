@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import PollDisplay from './PollDisplay';
 import { useNavigate } from 'react-router-dom';
-import { Heart, MessageCircle, Share2, Bookmark, Flag, Flame, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Flag, Flame, ChevronLeft, ChevronRight, FileText, Repeat2 } from 'lucide-react';
 import PdfViewer, { PdfPreview } from './PdfViewer';
 import { motion, AnimatePresence } from 'motion/react';
 import { getOptimizedImageUrl } from '../../lib/utils';
@@ -42,6 +42,7 @@ interface Post {
     expiresAt: any;
     votes: Record<string, number>;
   };
+  repostsCount?: number;
 }
 
 interface PostCardProps {
@@ -50,11 +51,13 @@ interface PostCardProps {
   hasUpvoted: boolean;
   hasDownvoted?: boolean;
   hasSaved?: boolean;
+  hasReposted?: boolean;
   onClick: () => void;
   onUpvote?: (post: Post) => void;
   onDownvote?: (post: Post) => void;
   onShare?: (post: Post) => void;
   onSave?: (post: Post) => void;
+  onRepost?: (post: Post) => void;
 }
 
 function timeAgo(date: any): string {
@@ -69,7 +72,7 @@ function timeAgo(date: any): string {
   return date.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onClick, onUpvote, onDownvote, onShare, onSave }: PostCardProps) {
+export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, hasReposted, onClick, onUpvote, onDownvote, onShare, onSave, onRepost }: PostCardProps) {
   const { showToast } = useToast();
 
   // Fetch live profile picture from Firestore — covers cases where pic was set after posting
@@ -364,6 +367,16 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
               <motion.div whileTap={{ scale: 0.8 }}>
                 <Share2 size={24} className="transition-transform group-hover:scale-110" />
               </motion.div>
+            </button>
+
+            <button 
+              onClick={(e) => { e.stopPropagation(); onRepost?.(post); }}
+              className={`flex items-center gap-1.5 text-[13px] transition-colors group ${hasReposted ? 'text-emerald-500 font-bold' : 'text-luxury-ink/40 hover:text-emerald-500 font-semibold'}`}
+            >
+              <div className="p-2 rounded-full group-hover:bg-emerald-500/10 transition-colors">
+                <Repeat2 size={16} className={hasReposted ? 'stroke-[2.5]' : ''} />
+              </div>
+              {(post.repostsCount || 0) > 0 && <span className="relative -left-1">{post.repostsCount}</span>}
             </button>
           </div>
 
