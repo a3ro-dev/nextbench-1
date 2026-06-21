@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3, ChevronLeft, ChevronRight, Paperclip, Film, Pencil, Repeat2 } from 'lucide-react';
+import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3, ChevronLeft, ChevronRight, Paperclip, Film, Pencil } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
@@ -30,7 +30,7 @@ import { usePublicClubs, joinClub } from '../../lib/clubs';
 import { savePost, unsavePost } from '../../lib/saves';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { notifyMentionedUsers } from '../../lib/mentions';
-import { repostPost, undoRepost, useRepostedPostIds } from '../../lib/reposts';
+
 
 interface Post {
   id: string;
@@ -54,7 +54,6 @@ interface Post {
   upvotesCount: number;
   downvotesCount?: number;
   repliesCount: number;
-  repostsCount?: number;
   feedScore?: number;
   poll?: {
     choices: string[];
@@ -309,8 +308,6 @@ function PostDetailModal({
   onEditReply,
   onUpvoteReply,
   onReply,
-  onRepost,
-  hasReposted,
   replyUpvotedIds,
   replyingTo,
   clearReplyingTo,
@@ -338,8 +335,6 @@ function PostDetailModal({
   onEditReply: (replyId: string, newContent: string) => void;
   onUpvoteReply: (replyId: string) => void;
   onReply: (replyId: string, authorName: string) => void;
-  onRepost?: (post: Post) => void;
-  hasReposted?: boolean;
   replyUpvotedIds: Set<string>;
   replyingTo: {id: string, name: string} | null;
   clearReplyingTo: () => void;
@@ -813,13 +808,6 @@ function PostDetailModal({
                 >
                   <Share2 size={24} />
                 </button>
-                <button
-                  onClick={() => onRepost && onRepost(post)}
-                  className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-[14px] font-semibold transition-all ${hasReposted ? 'bg-emerald-500/10 text-emerald-500' : 'hover:bg-surface-soft text-luxury-ink/40 hover:text-emerald-500'}`}
-                >
-                  <Repeat2 size={24} className={hasReposted ? 'stroke-[2.5]' : ''} />
-                  <span>{post.repostsCount || 0}</span>
-                </button>
               </div>
             </div>
             {(isAdmin || post.authorId === user?.uid) && onDelete && (
@@ -877,7 +865,7 @@ export default function Feed() {
   const [downvotedPostIds, setDownvotedPostIds] = useState<Set<string>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [downvoteMap, setDownvoteMap] = useState<Record<string, string>>({});
-  const repostedPostIds = useRepostedPostIds();
+
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [wishlistMap, setWishlistMap] = useState<Record<string, string>>({});
   const wishlistedProductIds = Array.from(wishlisted);
@@ -1328,28 +1316,6 @@ export default function Feed() {
 
   // ─── Handlers ─────────────────────────────────────────
 
-
-  const handleRepost = async (post: Post) => {
-    if (!user || !userData) {
-      window.location.href = '/login';
-      return;
-    }
-    if (repostedPostIds.has(post.id)) {
-      try {
-        await undoRepost(user.uid, post.id);
-        showToast('Repost removed', 'success');
-      } catch (err) {
-        showToast('Failed to remove repost', 'error');
-      }
-    } else {
-      try {
-        await repostPost(user.uid, userData.name || user.email?.split('@')[0] || 'Anonymous', userData.profilePicture, post);
-        showToast('Reposted successfully!', 'success');
-      } catch (err) {
-        showToast('Failed to repost', 'error');
-      }
-    }
-  };
 
 
   const handleCreatePost = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -2133,13 +2099,11 @@ export default function Feed() {
                     hasUpvoted={upvotedPostIds.has(item.id)} 
                     hasDownvoted={downvotedPostIds.has(item.id)}
                     hasSaved={savedPostIds.has(item.id)}
-                    hasReposted={repostedPostIds.has(item.id)}
                     onClick={() => setSelectedPost(item as Post)}
                     onUpvote={handleUpvote}
                     onDownvote={handleDownvote}
                     onShare={handleShare}
                     onSave={handleSavePost}
-                    onRepost={handleRepost}
                   />
                 );
 
@@ -2207,8 +2171,6 @@ export default function Feed() {
             onEditReply={handleEditReply}
             onUpvoteReply={handleUpvoteReply}
             onReply={handleReplyTo}
-            onRepost={handleRepost}
-            hasReposted={upvotedPostIds.has(selectedPost.id) /* fallback check */} 
             replyUpvotedIds={replyUpvotedIds}
             replyingTo={replyingTo}
             clearReplyingTo={() => setReplyingTo(null)}
