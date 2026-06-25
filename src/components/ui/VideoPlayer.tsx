@@ -118,6 +118,25 @@ export default function VideoPlayer({ src, className = '' }: VideoPlayerProps) {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // ─── Pause on scroll out of view ───────────────────
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          video.pause();
+        }
+      },
+      { threshold: 0.4 } // pause when less than 40% visible
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   // ─── Controls ──────────────────────────────────────
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
