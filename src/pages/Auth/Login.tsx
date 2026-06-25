@@ -8,7 +8,7 @@ import {
   signInWithRedirect,
   GoogleAuthProvider,
   signOut,
-  signInWithCustomToken,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
@@ -214,11 +214,11 @@ export default function Login() {
       const verifyFn = httpsCallable(functions, 'verifyAuthOtpEmail');
       const result: any = await verifyFn({ email: email.trim().toLowerCase(), otp });
 
-      if (!result.data?.customToken) {
-        throw new Error('Authentication failed. Please try again.');
+      if (!result.data?.loginPassword || !result.data?.email) {
+        throw new Error('Authentication failed.');
       }
-
-      await signInWithCustomToken(auth, result.data.customToken);
+      
+      await signInWithEmailAndPassword(auth, result.data.email, result.data.loginPassword);
 
       // Check Firestore profile exists
       const authUser = auth.currentUser;
@@ -346,40 +346,6 @@ export default function Login() {
                 transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                 className="space-y-4"
               >
-                {/* Google */}
-                <form onSubmit={handleGoogleLogin}>
-                  <motion.button
-                    whileHover={!isSigningIn && !isLoading ? { scale: 1.015, y: -1 } : undefined}
-                    whileTap={!isSigningIn && !isLoading ? { scale: 0.97 } : undefined}
-                    transition={{ duration: 0.15 }}
-                    type="submit"
-                    disabled={isSigningIn || isLoading}
-                    className="w-full bg-luxury-ink text-surface-base py-4 rounded-sm font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-luxury-ink/10 hover:bg-brand-teal transition-colors flex items-center justify-center gap-3 group disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <ShieldCheck size={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-                    <AnimatePresence mode="wait" initial={false}>
-                      <motion.span
-                        key={isSigningIn ? 'verifying' : 'idle'}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        {isSigningIn ? 'Verifying…' : 'Continue with Google'}
-                      </motion.span>
-                    </AnimatePresence>
-                  </motion.button>
-                </form>
-
-                {/* Divider */}
-                <div className="relative py-4 flex items-center">
-                  <div className="grow border-t border-luxury-ink/10" />
-                  <span className="shrink-0 mx-4 text-luxury-ink/30 text-[10px] font-bold uppercase tracking-widest">
-                    Or sign in with email
-                  </span>
-                  <div className="grow border-t border-luxury-ink/10" />
-                </div>
-
                 {/* Email OTP */}
                 <form onSubmit={handleSendOtp} className="space-y-4">
                   <div className="relative">
@@ -402,10 +368,44 @@ export default function Login() {
                     transition={{ duration: 0.15 }}
                     type="submit"
                     disabled={isLoading || !email}
-                    className="w-full bg-transparent border border-luxury-ink text-luxury-ink py-4 rounded-sm font-bold text-xs uppercase tracking-[0.2em] hover:bg-luxury-ink hover:text-surface-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-brand-pink text-white py-4 rounded-sm font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-brand-pink/10 hover:bg-brand-teal transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <KeyRound size={14} />
                     {isLoading ? 'Sending…' : 'Send One-Time Code'}
+                  </motion.button>
+                </form>
+
+                {/* Divider */}
+                <div className="relative py-6 flex items-center">
+                  <div className="grow border-t border-luxury-ink/10" />
+                  <span className="shrink-0 mx-4 text-luxury-ink/30 text-[10px] font-bold uppercase tracking-widest">
+                    Or
+                  </span>
+                  <div className="grow border-t border-luxury-ink/10" />
+                </div>
+
+                {/* Google */}
+                <form onSubmit={handleGoogleLogin}>
+                  <motion.button
+                    whileHover={!isSigningIn && !isLoading ? { scale: 1.015, y: -1 } : undefined}
+                    whileTap={!isSigningIn && !isLoading ? { scale: 0.97 } : undefined}
+                    transition={{ duration: 0.15 }}
+                    type="submit"
+                    disabled={isSigningIn || isLoading}
+                    className="w-full bg-transparent border border-luxury-ink/20 text-luxury-ink py-4 rounded-sm font-bold text-xs uppercase tracking-[0.2em] hover:bg-luxury-ink/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group"
+                  >
+                    <ShieldCheck size={16} className="text-luxury-ink/60 group-hover:text-luxury-ink transition-colors" />
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.span
+                        key={isSigningIn ? 'verifying' : 'idle'}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.15 }}
+                      >
+                        {isSigningIn ? 'Verifying…' : 'Continue with Google'}
+                      </motion.span>
+                    </AnimatePresence>
                   </motion.button>
                 </form>
               </motion.div>

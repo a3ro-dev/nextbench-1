@@ -3,7 +3,7 @@ import { Building, ShieldCheck, X, Search, ChevronDown, Mail, ArrowLeft, RotateC
 import { Link, useNavigate } from 'react-router-dom';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth, db, functions } from '../../lib/firebase';
-import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, signInWithCustomToken } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, signInWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { doc, setDoc, getDoc, serverTimestamp, collection, getDocs, addDoc, query, where, limit, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../../lib/AuthContext';
@@ -283,11 +283,9 @@ function TermsLabel({ checked, onChange }: { checked: boolean; onChange: (v: boo
 }
 
 // ─── Main Signup Page ─────────────────────────────────────────────────────────
-type SignupTab = 'google' | 'email';
 type SignupStep = 'details' | 'otp';
 
 export default function Signup() {
-  const [activeTab, setActiveTab] = useState<SignupTab>('google');
   const [signupStep, setSignupStep] = useState<SignupStep>('details');
 
   // Shared state
@@ -412,8 +410,7 @@ export default function Signup() {
     }
   };
 
-  const handleGoogleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleSignup = async () => {
     if (!school) { setError('Please select your school.'); return; }
     await triggerGoogleSignIn(school);
   };
@@ -474,8 +471,8 @@ export default function Signup() {
         },
       });
 
-      if (!result.data?.customToken) throw new Error('Authentication failed.');
-      await signInWithCustomToken(auth, result.data.customToken);
+      if (!result.data?.loginPassword || !result.data?.email) throw new Error('Authentication failed.');
+      await signInWithEmailAndPassword(auth, result.data.email, result.data.loginPassword);
       localStorage.removeItem('pendingReferral');
       navigate('/dashboard');
     } catch (err: any) {
@@ -542,71 +539,10 @@ export default function Signup() {
             )}
           </AnimatePresence>
 
-          {/* Tab switcher */}
-          <AnimatePresence>
-            {signupStep === 'details' && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex bg-luxury-ink/5 rounded-lg p-1 mb-6"
-              >
-                {(['google', 'email'] as SignupTab[]).map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => { setActiveTab(tab); setError(''); }}
-                    className={`flex-1 py-2.5 text-[11px] font-bold uppercase tracking-widest rounded-md transition-all ${
-                      activeTab === tab
-                        ? 'bg-luxury-ink text-surface-base shadow-sm'
-                        : 'text-luxury-ink/40 hover:text-luxury-ink/60'
-                    }`}
-                  >
-                    {tab === 'google' ? 'Google' : 'Email OTP'}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Form content */}
           <AnimatePresence mode="wait" initial={false}>
-            {/* Google Tab */}
-            {activeTab === 'google' && signupStep === 'details' && (
-              <motion.form
-                key="google-form"
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={{ duration: 0.2 }}
-                onSubmit={handleGoogleSignup}
-                className="space-y-5"
-              >
-                {SharedSchoolFields}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-teal/40 ml-1">Referral Code (Optional)</label>
-                  <input
-                    type="text"
-                    value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                    placeholder="Enter invite code"
-                    className="w-full bg-surface-base border border-luxury-ink/5 rounded-sm py-4 px-6 focus:outline-none focus:border-brand-teal transition-all text-sm font-medium uppercase"
-                  />
-                </div>
-                <TermsLabel checked={agreedToTerms} onChange={setAgreedToTerms} />
-                <button
-                  type="submit"
-                  disabled={!agreedToTerms || isSigningIn}
-                  className="w-full bg-brand-pink text-white py-5 rounded-sm font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-brand-pink/10 hover:bg-brand-teal transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck size={15} />
-                  {isSigningIn ? 'Connecting…' : 'Continue with Google'}
-                </button>
-              </motion.form>
-            )}
-
-            {/* Email OTP Tab — Step 1: Details */}
-            {activeTab === 'email' && signupStep === 'details' && (
+            {/* Step 1: Details */}
+            {signupStep === 'details' && (
               <motion.form
                 key="email-form"
                 initial={{ opacity: 0, x: 12 }}
@@ -658,6 +594,7 @@ export default function Signup() {
                   />
                 </div>
                 <TermsLabel checked={agreedToTerms} onChange={setAgreedToTerms} />
+                
                 <button
                   type="submit"
                   disabled={!agreedToTerms || isSendingOtp || !emailInput}
@@ -666,11 +603,30 @@ export default function Signup() {
                   <KeyRound size={15} />
                   {isSendingOtp ? 'Sending Code…' : 'Send Verification Code'}
                 </button>
+
+                {/* Divider */}
+                <div className="relative py-4 flex items-center">
+                  <div className="grow border-t border-luxury-ink/10" />
+                  <span className="shrink-0 mx-4 text-luxury-ink/30 text-[10px] font-bold uppercase tracking-widest">
+                    Or
+                  </span>
+                  <div className="grow border-t border-luxury-ink/10" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignup}
+                  disabled={!agreedToTerms || isSigningIn}
+                  className="w-full bg-transparent border border-luxury-ink/20 text-luxury-ink py-4 rounded-sm font-bold text-xs uppercase tracking-[0.2em] hover:bg-luxury-ink/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group"
+                >
+                  <ShieldCheck size={16} className="text-luxury-ink/60 group-hover:text-luxury-ink transition-colors" />
+                  {isSigningIn ? 'Connecting…' : 'Continue with Google'}
+                </button>
               </motion.form>
             )}
 
-            {/* Email OTP Tab — Step 2: Enter OTP */}
-            {activeTab === 'email' && signupStep === 'otp' && (
+            {/* Step 2: Enter OTP */}
+            {signupStep === 'otp' && (
               <motion.div
                 key="otp-step"
                 initial={{ opacity: 0, y: 12 }}
