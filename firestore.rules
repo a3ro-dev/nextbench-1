@@ -6,7 +6,7 @@ service cloud.firestore {
     }
 
     function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true; }
+    function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
     function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
 
     function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
@@ -322,11 +322,8 @@ service cloud.firestore {
       // resource.data is not available on list queries in security rules.
       allow list: if isSignedIn();
 
-      allow create: if isSignedIn()
-        && incoming().userId is string
-        && incoming().type is string
-        && incoming().title is string
-        && incoming().read == false;
+      // Notification creation is server-side only (via Cloud Functions) to prevent client-side spamming.
+      allow create: if false;
 
       allow update: if isSignedIn()
         && resource.data.userId == request.auth.uid
@@ -470,13 +467,7 @@ service cloud.firestore {
       allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
-    // === REPLY UPVOTES ===
-    match /reply_upvotes/{upvoteId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().replyId is string;
-      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
+
 
     // === FOLLOWS ===
     match /follows/{followId} {

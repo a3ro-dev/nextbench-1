@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import PollDisplay from './PollDisplay';
 import { useNavigate } from 'react-router-dom';
 import { Heart, MessageCircle, Share2, Bookmark, Flag, Flame, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
-import PdfViewer, { PdfPreview } from './PdfViewer';
+// Lazy-load heavy renderers — only needed for posts with PDF or video content
+const PdfViewer = lazy(() => import('./PdfViewer'));
+const PdfPreview = lazy(() => import('./PdfViewer').then(m => ({ default: m.PdfPreview })));
+const VideoPlayer = lazy(() => import('./VideoPlayer'));
 import { motion, AnimatePresence } from 'motion/react';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { POST_TYPES } from '../../pages/Dashboard/Feed';
 import { getPersonaDisplay } from '../../lib/confessions';
 import ReportModal from './ReportModal';
 import LinkifiedText from './LinkifiedText';
-import VideoPlayer from './VideoPlayer';
 import { useToast } from '../../lib/ToastContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+
+const LazyFallback = () => (
+  <div className="flex items-center justify-center p-4">
+    <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 interface Post {
   id: string;
@@ -36,6 +44,7 @@ interface Post {
   downvotesCount?: number;
   repliesCount: number;
   feedScore?: number;
+  isHot?: boolean;
   city?: string;
   createdAt: any;
   poll?: {
@@ -73,7 +82,9 @@ function timeAgo(date: any): string {
 export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onClick, onUpvote, onDownvote, onShare, onSave }: PostCardProps) {
   const { showToast } = useToast();
 
-  // Fetch live profile picture from Firestore — covers cases where pic was set after posting
+  // The feed's batch user resolver pre-populates authorProfilePicture for all posts,
+  // so this fallback getDoc almost never fires in normal usage. It only activates
+  // for posts that arrive via direct URL or without an author cache hit.
   const [liveProfilePicture, setLiveProfilePicture] = useState<string | undefined>(
     post.authorProfilePicture
   );
@@ -90,6 +101,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
     };
     fetchProfilePic();
   }, [post.authorId, post.authorProfilePicture, post.isAnonymous]);
+
 
   const postImageUrls = post.imageUrls && post.imageUrls.length > 0
     ? post.imageUrls
@@ -190,7 +202,8 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
             {/* Avatar */}
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold overflow-hidden shrink-0 ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
               {!displayInfo.isAnonymous && liveProfilePicture ? (
-                <img src={getOptimizedImageUrl(liveProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={getOptimizedImageUrl(liveProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+
               ) : displayInfo.name[0]?.toUpperCase()}
             </div>
             
@@ -203,7 +216,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {post.feedScore && post.feedScore > 10 && (
+              {post.isHot && (
                 <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-500 rounded text-[10px] font-bold uppercase tracking-wide">
                   <Flame size={10} /> Hot
                 </span>
@@ -245,7 +258,9 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
               className="w-full h-auto pointer-events-none"
               referrerPolicy="no-referrer"
               draggable={false}
+              loading="lazy"
             />
+
 
             {postImageUrls.length > 1 && (
               <>
@@ -284,15 +299,21 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
 
         {/* PDF Preview + Full Viewer */}
         {post.pdfUrl && (
-          <PdfPreview pdfUrl={post.pdfUrl} totalPages={post.pdfPages || 1} title={post.title} />
+          <Suspense fallback={<LazyFallback />}>
+            <PdfPreview pdfUrl={post.pdfUrl} totalPages={post.pdfPages || 1} title={post.title} />
+          </Suspense>
         )}
+
 
         {/* Video */}
         {(post as any).videoUrl && (
           <div className="relative mt-2 mb-6 w-full">
-            <VideoPlayer src={(post as any).videoUrl} />
+            <Suspense fallback={<LazyFallback />}>
+              <VideoPlayer src={(post as any).videoUrl} />
+            </Suspense>
           </div>
         )}
+
 
         {/* Action Bar */}
         <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-y-4" style={{ borderColor: 'var(--color-border)' }}>

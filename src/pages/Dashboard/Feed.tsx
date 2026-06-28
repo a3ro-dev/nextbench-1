@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3, ChevronLeft, ChevronRight, Paperclip, Film, Pencil } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch, orderBy, limit, documentId, startAfter, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -16,14 +16,15 @@ import { createNotification } from '../../lib/notifications';
 import ShareModal from '../../components/ui/ShareModal';
 import { Link, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import ImageCropper from '../../components/ui/ImageCropper';
+// Lazy-load heavy components — only bundled/parsed when actually needed
+const ImageCropper = lazy(() => import('../../components/ui/ImageCropper'));
+const VideoPlayer = lazy(() => import('../../components/ui/VideoPlayer'));
 import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
 import PollDisplay from '../../components/ui/PollDisplay';
 import LinkifiedText from '../../components/ui/LinkifiedText';
 import MentionInput from '../../components/ui/MentionInput';
 import { useScrollLock } from '../../hooks/useScrollLock';
-import VideoPlayer from '../../components/ui/VideoPlayer';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { getPersonaDisplay } from '../../lib/confessions';
 import { togglePostReaction, getUserReaction, REACTION_TYPES, REACTION_KEYS, ReactionType } from '../../lib/reactions';
@@ -31,6 +32,15 @@ import { usePublicClubs, joinClub } from '../../lib/clubs';
 import { savePost, unsavePost } from '../../lib/saves';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { notifyMentionedUsers } from '../../lib/mentions';
+
+// Minimal spinner used as Suspense fallback for lazy components
+const LazyFallback = () => (
+  <div className="flex items-center justify-center p-4">
+    <div className="w-5 h-5 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+
 
 
 interface Post {
@@ -169,17 +179,11 @@ function Comment({ reply, repliesMap, onReply, onDeleteReply, onEditReply, onUpv
     setIsEditing(false);
   };
 
-  // Show stored pic immediately; fall back to live Firestore fetch if missing
-  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(reply.authorProfilePicture);
-  useEffect(() => {
-    if (reply.authorProfilePicture || !reply.authorId) return;
-    getDoc(doc(db, 'users', reply.authorId)).then(snap => {
-      if (snap.exists()) {
-        const pic = snap.data()?.profilePicture;
-        if (pic) setAvatarUrl(pic);
-      }
-    }).catch(() => {});
-  }, [reply.authorId, reply.authorProfilePicture]);
+  // Avatar URL — populated by the parent onSnapshot handler which batch-resolves
+  // all missing avatars in a single query before calling setReplies().
+  // The individual getDoc fallback has been removed to eliminate N+1 Firestore reads.
+  const [avatarUrl] = useState<string | undefined>(reply.authorProfilePicture);
+
 
   return (
     <div className={`mt-4 ${level > 0 ? 'ml-4 md:ml-6 border-l-2 border-brand-teal/20 pl-4 md:pl-6' : ''}`}>
@@ -188,7 +192,8 @@ function Comment({ reply, repliesMap, onReply, onDeleteReply, onEditReply, onUpv
           <Link to={`/profile/${reply.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div className="w-6 h-6 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-[10px] shrink-0 overflow-hidden">
               {avatarUrl ? (
-                <img src={getOptimizedImageUrl(avatarUrl)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={getOptimizedImageUrl(avatarUrl)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+
               ) : reply.authorName[0]?.toUpperCase()}
             </div>
             <div>
@@ -386,6 +391,15 @@ function PostDetailModal({
 
   const [commentSort, setCommentSort] = useState<'recent' | 'top' | 'discussed'>('recent');
 
+  // Stable blob URL for reply image preview — avoids memory leak from inline createObjectURL
+  const replyImagePreviewUrl = useMemo(
+    () => (replyImageFile ? URL.createObjectURL(replyImageFile) : null),
+    [replyImageFile]
+  );
+  useEffect(() => {
+    return () => { if (replyImagePreviewUrl) URL.revokeObjectURL(replyImagePreviewUrl); };
+  }, [replyImagePreviewUrl]);
+
   const sortedRootReplies = useMemo(() => {
     const roots = repliesMap['root'] || [];
     if (commentSort === 'top') {
@@ -505,10 +519,12 @@ function PostDetailModal({
           {/* Video */}
           {(post as any).videoUrl && (
             <div className="relative mb-6 w-full rounded-2xl overflow-hidden bg-black">
-              <VideoPlayer
-                src={(post as any).videoUrl}
-                className="w-full h-auto max-h-[60vh] object-contain"
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <VideoPlayer
+                  src={(post as any).videoUrl}
+                  className="w-full h-auto max-h-[60vh] object-contain"
+                />
+              </Suspense>
             </div>
           )}
 
@@ -649,7 +665,8 @@ function PostDetailModal({
               ) : replyImageFile ? (
                 <div className="relative inline-block mb-3">
                   <div className="w-20 h-20 rounded-xl overflow-hidden border border-luxury-ink/10">
-                    <img src={URL.createObjectURL(replyImageFile)} alt="Preview" className="w-full h-full object-cover" />
+                    <img src={replyImagePreviewUrl!} alt="Preview" className="w-full h-full object-cover" />
+
                   </div>
                   <button
                     type="button"
@@ -897,8 +914,18 @@ export default function Feed() {
   // Lock body scroll when a modal is open
   useScrollLock(isModalOpen || !!selectedPost || cropImageSrc !== null);
 
-
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
+
+  // Stable blob URLs for image-file previews in the post creation modal.
+  // useMemo creates each URL once per imageFiles change; useEffect revokes
+  // old URLs when imageFiles changes or the component unmounts.
+  const imageFilePreviewUrls = useMemo(
+    () => imageFiles.map(f => URL.createObjectURL(f)),
+    [imageFiles]
+  );
+  useEffect(() => {
+    return () => { imageFilePreviewUrls.forEach(u => URL.revokeObjectURL(u)); };
+  }, [imageFilePreviewUrls]);
 
   // ─── Pagination state ────────────────────────────────────
   const [lastPostDoc, setLastPostDoc] = useState<QueryDocumentSnapshot | null>(null);
@@ -1356,14 +1383,49 @@ export default function Feed() {
   useEffect(() => {
     if (!selectedPost) return;
     const q = query(collection(db, 'post_replies'), where('postId', '==', selectedPost.id));
-    const unsub = onSnapshot(q, snap => {
+    const unsub = onSnapshot(q, async (snap) => {
       const reps: any[] = [];
       snap.forEach(d => reps.push({ id: d.id, ...d.data() }));
       reps.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+
+      // ─── Batch-resolve missing author profile pictures (eliminates N+1 getDoc) ───
+      // Collect all unique authorIds that are missing a profilePicture in the reply data.
+      const missingAvatarIds = Array.from(new Set(
+        reps
+          .filter(r => r.authorId && !r.authorProfilePicture && !r.isAnonymous)
+          .map(r => r.authorId as string)
+      ));
+
+      if (missingAvatarIds.length > 0) {
+        // Firestore 'in' queries are capped at 30 elements per batch.
+        const avatarMap: Record<string, string> = {};
+        for (let i = 0; i < missingAvatarIds.length; i += 30) {
+          const batch = missingAvatarIds.slice(i, i + 30);
+          try {
+            const batchSnap = await getDocs(
+              query(collection(db, 'users'), where(documentId(), 'in', batch))
+            );
+            batchSnap.forEach(uDoc => {
+              const pic = uDoc.data()?.profilePicture;
+              if (pic) avatarMap[uDoc.id] = pic;
+            });
+          } catch {
+            // Non-critical: Comment component still shows initials as fallback.
+          }
+        }
+        // Enrich replies with resolved avatars so Comment components never need getDoc.
+        reps.forEach(r => {
+          if (r.authorId && avatarMap[r.authorId]) {
+            r.authorProfilePicture = avatarMap[r.authorId];
+          }
+        });
+      }
+
       setReplies(reps);
     });
     return () => unsub();
   }, [selectedPost]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -2284,7 +2346,8 @@ export default function Feed() {
         <div className="border-b px-4 py-3 flex items-center gap-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
           <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden shrink-0">
             {userData?.profilePicture ? (
-              <img src={getOptimizedImageUrl(userData.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <img src={getOptimizedImageUrl(userData.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+
             ) : (
               <span className="text-brand-teal font-semibold text-sm">{(userData?.name || 'U')[0].toUpperCase()}</span>
             )}
@@ -2570,7 +2633,8 @@ export default function Feed() {
                   <div className="flex items-center gap-3 mb-6 px-1">
                     <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm overflow-hidden shrink-0">
                       {userData?.profilePicture ? (
-                        <img src={getOptimizedImageUrl(userData.profilePicture)} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={getOptimizedImageUrl(userData.profilePicture)} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+
                       ) : (
                         userData?.name?.[0]?.toUpperCase() || <Users size={16} />
                       )}
@@ -2712,7 +2776,8 @@ export default function Feed() {
                         {imageFiles.map((file, index) => (
                           <div key={index} className="relative group shrink-0">
                             <div className="w-24 h-24 rounded-xl overflow-hidden border border-luxury-ink/10">
-                              <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
+                              <img src={imageFilePreviewUrls[index]} alt="Preview" className="w-full h-full object-cover" />
+
                             </div>
                             <button
                               type="button"
@@ -2911,13 +2976,16 @@ export default function Feed() {
 
       {/* ─── Image Cropper ──────────────────────────────── */}
       {cropImageSrc && (
-        <ImageCropper
-          imageSrc={cropImageSrc}
-          onCropComplete={handleCropComplete}
-          onCancel={handleCropCancel}
-          aspect={1}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <ImageCropper
+            imageSrc={cropImageSrc}
+            onCropComplete={handleCropComplete}
+            onCancel={handleCropCancel}
+            aspect={1}
+          />
+        </Suspense>
       )}
+
       {/* ─── Share Modal ──────────────────────────────── */}
       <ShareModal
         isOpen={shareModalData.isOpen}
@@ -2986,7 +3054,8 @@ function HorizontalDiscoverClubs() {
           >
             <div className="w-16 h-16 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden mb-3 border-[3px] border-surface-card shadow-sm ring-1 ring-luxury-ink/5">
               {club.avatar ? (
-                <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                <img src={getOptimizedImageUrl(club.avatar)} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" loading="lazy" />
+
               ) : (
                 <Users size={20} className="text-brand-teal/50" />
               )}

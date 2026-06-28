@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
+exports.createNotification = exports.rateLimitReply = exports.rateLimitMessage = exports.rateLimitPost = exports.onUserUpdated = exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -775,13 +775,13 @@ exports.sendWeeklyDigest = (0, scheduler_1.onSchedule)({ schedule: "every sunday
 });
 // ─── Email #4: Admin Broadcast ─────────────────────────────────────────────────
 exports.broadcastEmail = (0, https_1.onCall)({ secrets: [EMAIL_PASS], invoker: "public", cors: true, timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "Must be logged in.");
-    const adminSnap = await db.collection("users").doc(uid).get();
-    if (!((_b = adminSnap.data()) === null || _b === void 0 ? void 0 : _b.isAdmin))
+    if (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.admin) !== true) {
         throw new https_1.HttpsError("permission-denied", "Admins only.");
+    }
     const { subject, bodyHtml, broadcastId } = request.data;
     if (!subject || !bodyHtml)
         throw new https_1.HttpsError("invalid-argument", "subject and bodyHtml are required.");
@@ -800,7 +800,7 @@ exports.broadcastEmail = (0, https_1.onCall)({ secrets: [EMAIL_PASS], invoker: "
         const user = userDoc.data();
         if (!user.email || user.emailOptOut === true)
             continue;
-        const firstName = ((_c = user.name) === null || _c === void 0 ? void 0 : _c.split(" ")[0]) || "there";
+        const firstName = ((_d = user.name) === null || _d === void 0 ? void 0 : _d.split(" ")[0]) || "there";
         const unsubscribeUrl = `${APP_URL}/unsubscribe?uid=${userDoc.id}`;
         const fullHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -967,5 +967,152 @@ exports.moderateReply = (0, firestore_1.onDocumentCreated)({ document: "post_rep
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
     }
+});
+exports.onUserUpdated = (0, firestore_1.onDocumentUpdated)({ document: "users/{userId}" }, async (event) => {
+    const change = event.data;
+    if (!change)
+        return;
+    const before = change.before.data();
+    const after = change.after.data();
+    const uid = event.params.userId;
+    const beforeAdmin = (before === null || before === void 0 ? void 0 : before.isAdmin) === true;
+    const afterAdmin = (after === null || after === void 0 ? void 0 : after.isAdmin) === true;
+    // If admin status changed, sync to custom claims
+    if (beforeAdmin !== afterAdmin) {
+        console.log(`Syncing admin custom claim for user ${uid} to ${afterAdmin}`);
+        await admin.auth().setCustomUserClaims(uid, { admin: afterAdmin });
+    }
+});
+async function enforceRateLimit(uid, actionType, limit, windowMs) {
+    const rateLimitRef = db.collection('rate_limits').doc(`${actionType}_${uid}`);
+    const now = Date.now();
+    const windowStartThreshold = now - windowMs;
+    try {
+        let allowed = true;
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(rateLimitRef);
+            if (!doc.exists) {
+                transaction.set(rateLimitRef, { count: 1, windowStart: now });
+            }
+            else {
+                const data = doc.data();
+                if (!data || data.windowStart < windowStartThreshold) {
+                    transaction.update(rateLimitRef, { count: 1, windowStart: now });
+                }
+                else {
+                    if (data.count >= limit) {
+                        allowed = false;
+                    }
+                    else {
+                        transaction.update(rateLimitRef, { count: data.count + 1 });
+                    }
+                }
+            }
+        });
+        return allowed;
+    }
+    catch (err) {
+        console.error(`Rate limit check failed for ${uid} (${actionType}):`, err);
+        return true; // Fail-open on rate limiter error to prevent blocking normal users
+    }
+}
+exports.rateLimitPost = (0, firestore_1.onDocumentCreated)({ document: "posts/{postId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 5 posts per 5 minutes
+    const allowed = await enforceRateLimit(uid, 'post', 5, 300000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded post rate limit. Deleting post ${event.params.postId}.`);
+        await snapshot.ref.delete();
+    }
+});
+exports.rateLimitMessage = (0, firestore_1.onDocumentCreated)({ document: "chatRooms/{roomId}/messages/{messageId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.senderId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 30 messages per minute
+    const allowed = await enforceRateLimit(uid, 'message', 30, 60000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded message rate limit. Deleting message ${event.params.messageId}.`);
+        await snapshot.ref.delete();
+    }
+});
+exports.rateLimitReply = (0, firestore_1.onDocumentCreated)({ document: "post_replies/{replyId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 15 replies per minute
+    const allowed = await enforceRateLimit(uid, 'reply', 15, 60000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded reply rate limit. Deleting reply ${event.params.replyId}.`);
+        await snapshot.ref.delete();
+    }
+});
+exports.createNotification = (0, https_1.onCall)({ invoker: "public", cors: true }, async (request) => {
+    var _a, _b, _c;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid)
+        throw new https_1.HttpsError("unauthenticated", "Must be logged in.");
+    const { userId, type, title, message, link, postId } = request.data;
+    if (!userId || !type || !title || !message) {
+        throw new https_1.HttpsError("invalid-argument", "Missing required fields.");
+    }
+    // Rate Limiting (max 15 notification creations/minute per user)
+    const allowed = await enforceRateLimit(uid, 'notif_create', 15, 60000);
+    if (!allowed) {
+        throw new https_1.HttpsError("resource-exhausted", "Rate limit exceeded. Max 15 notifications per minute.");
+    }
+    // Restrict administrative/sensitive notification types to actual admin users
+    const adminNotifTypes = ['listing_approved', 'listing_rejected', 'admin_promoted', 'user_approved'];
+    if (adminNotifTypes.includes(type)) {
+        if (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.admin) !== true) {
+            throw new https_1.HttpsError("permission-denied", "Only admins can trigger administrative notifications.");
+        }
+    }
+    // Check that the recipient user document exists
+    const userSnap = await db.collection("users").doc(userId).get();
+    if (!userSnap.exists) {
+        throw new https_1.HttpsError("not-found", "Recipient user not found.");
+    }
+    // Add the notification document
+    const notifRef = await db.collection("notifications").add({
+        userId,
+        type,
+        title,
+        message,
+        link: link || null,
+        postId: postId || null,
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { success: true, id: notifRef.id };
 });
 //# sourceMappingURL=index.js.map
