@@ -1123,3 +1123,103 @@ export const onUserUpdated = onDocumentUpdated(
   }
 );
 
+async function enforceRateLimit(uid: string, actionType: string, limit: number, windowMs: number): Promise<boolean> {
+  const rateLimitRef = db.collection('rate_limits').doc(`${actionType}_${uid}`);
+  const now = Date.now();
+  const windowStartThreshold = now - windowMs;
+
+  try {
+    let allowed = true;
+    await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(rateLimitRef);
+      if (!doc.exists) {
+        transaction.set(rateLimitRef, { count: 1, windowStart: now });
+      } else {
+        const data = doc.data();
+        if (!data || data.windowStart < windowStartThreshold) {
+          transaction.update(rateLimitRef, { count: 1, windowStart: now });
+        } else {
+          if (data.count >= limit) {
+            allowed = false;
+          } else {
+            transaction.update(rateLimitRef, { count: data.count + 1 });
+          }
+        }
+      }
+    });
+    return allowed;
+  } catch (err) {
+    console.error(`Rate limit check failed for ${uid} (${actionType}):`, err);
+    return true; // Fail-open on rate limiter error to prevent blocking normal users
+  }
+}
+
+export const rateLimitPost = onDocumentCreated(
+  { document: "posts/{postId}" },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid) return;
+
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (callerSnap.data()?.isAdmin === true) return;
+
+    // Limit: Max 5 posts per 5 minutes
+    const allowed = await enforceRateLimit(uid, 'post', 5, 300000);
+    if (!allowed) {
+      console.warn(`User ${uid} exceeded post rate limit. Deleting post ${event.params.postId}.`);
+      await snapshot.ref.delete();
+    }
+  }
+);
+
+export const rateLimitMessage = onDocumentCreated(
+  { document: "chatRooms/{roomId}/messages/{messageId}" },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+
+    const data = snapshot.data();
+    const uid = data.senderId;
+    if (!uid) return;
+
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (callerSnap.data()?.isAdmin === true) return;
+
+    // Limit: Max 30 messages per minute
+    const allowed = await enforceRateLimit(uid, 'message', 30, 60000);
+    if (!allowed) {
+      console.warn(`User ${uid} exceeded message rate limit. Deleting message ${event.params.messageId}.`);
+      await snapshot.ref.delete();
+    }
+  }
+);
+
+export const rateLimitReply = onDocumentCreated(
+  { document: "post_replies/{replyId}" },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid) return;
+
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (callerSnap.data()?.isAdmin === true) return;
+
+    // Limit: Max 15 replies per minute
+    const allowed = await enforceRateLimit(uid, 'reply', 15, 60000);
+    if (!allowed) {
+      console.warn(`User ${uid} exceeded reply rate limit. Deleting reply ${event.params.replyId}.`);
+      await snapshot.ref.delete();
+    }
+  }
+);
+

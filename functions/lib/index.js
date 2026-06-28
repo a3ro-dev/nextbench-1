@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onUserUpdated = exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
+exports.rateLimitReply = exports.rateLimitMessage = exports.rateLimitPost = exports.onUserUpdated = exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -981,6 +981,99 @@ exports.onUserUpdated = (0, firestore_1.onDocumentUpdated)({ document: "users/{u
     if (beforeAdmin !== afterAdmin) {
         console.log(`Syncing admin custom claim for user ${uid} to ${afterAdmin}`);
         await admin.auth().setCustomUserClaims(uid, { admin: afterAdmin });
+    }
+});
+async function enforceRateLimit(uid, actionType, limit, windowMs) {
+    const rateLimitRef = db.collection('rate_limits').doc(`${actionType}_${uid}`);
+    const now = Date.now();
+    const windowStartThreshold = now - windowMs;
+    try {
+        let allowed = true;
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(rateLimitRef);
+            if (!doc.exists) {
+                transaction.set(rateLimitRef, { count: 1, windowStart: now });
+            }
+            else {
+                const data = doc.data();
+                if (!data || data.windowStart < windowStartThreshold) {
+                    transaction.update(rateLimitRef, { count: 1, windowStart: now });
+                }
+                else {
+                    if (data.count >= limit) {
+                        allowed = false;
+                    }
+                    else {
+                        transaction.update(rateLimitRef, { count: data.count + 1 });
+                    }
+                }
+            }
+        });
+        return allowed;
+    }
+    catch (err) {
+        console.error(`Rate limit check failed for ${uid} (${actionType}):`, err);
+        return true; // Fail-open on rate limiter error to prevent blocking normal users
+    }
+}
+exports.rateLimitPost = (0, firestore_1.onDocumentCreated)({ document: "posts/{postId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 5 posts per 5 minutes
+    const allowed = await enforceRateLimit(uid, 'post', 5, 300000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded post rate limit. Deleting post ${event.params.postId}.`);
+        await snapshot.ref.delete();
+    }
+});
+exports.rateLimitMessage = (0, firestore_1.onDocumentCreated)({ document: "chatRooms/{roomId}/messages/{messageId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.senderId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 30 messages per minute
+    const allowed = await enforceRateLimit(uid, 'message', 30, 60000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded message rate limit. Deleting message ${event.params.messageId}.`);
+        await snapshot.ref.delete();
+    }
+});
+exports.rateLimitReply = (0, firestore_1.onDocumentCreated)({ document: "post_replies/{replyId}" }, async (event) => {
+    var _a;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const data = snapshot.data();
+    const uid = data.authorId;
+    if (!uid)
+        return;
+    // Admin users bypass rate limiting
+    const callerSnap = await db.collection("users").doc(uid).get();
+    if (((_a = callerSnap.data()) === null || _a === void 0 ? void 0 : _a.isAdmin) === true)
+        return;
+    // Limit: Max 15 replies per minute
+    const allowed = await enforceRateLimit(uid, 'reply', 15, 60000);
+    if (!allowed) {
+        console.warn(`User ${uid} exceeded reply rate limit. Deleting reply ${event.params.replyId}.`);
+        await snapshot.ref.delete();
     }
 });
 //# sourceMappingURL=index.js.map
