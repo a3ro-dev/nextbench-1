@@ -8,8 +8,9 @@ import { db } from '../../lib/firebase';
 import { handleFirestoreError, OperationType } from '../../lib/firestore-errors';
 import { useAuth } from '../../lib/AuthContext';
 import { useToast } from '../../lib/ToastContext';
-import { createNotification } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/utils';
+import { createNotification } from '../../lib/notifications';
+import DOMPurify from 'dompurify';
 
 interface PendingUser { id: string; name: string; school: string; email: string; verified: boolean; isAdmin: boolean; reputation: number; idCardUrl?: string; selfieUrl?: string; verificationStatus?: string; verificationRejectionReason?: string; }
 interface PendingProduct { id: string; title: string; category: string; price: number; sellerName: string; sellerId: string; image: string; description: string; }
@@ -715,7 +716,7 @@ export default function AdminPanel() {
                     </div>
                     <div className="bg-white rounded-b-xl p-6">
                       <p className="font-bold text-gray-800 mb-4">Hey [First Name] 👋</p>
-                      <div className="text-gray-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: emailBodyHtml }} />
+                      <div className="text-gray-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(emailBodyHtml) }} />
                       <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-gray-400">You're receiving this because you have a Nextbench account. · Unsubscribe</div>
                     </div>
                   </div>
