@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3, ChevronLeft, ChevronRight, Paperclip, Film, Pencil } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch, orderBy, limit, documentId, startAfter, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -16,14 +16,15 @@ import { createNotification } from '../../lib/notifications';
 import ShareModal from '../../components/ui/ShareModal';
 import { Link, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import ImageCropper from '../../components/ui/ImageCropper';
+// Lazy-load heavy components — only bundled/parsed when actually needed
+const ImageCropper = lazy(() => import('../../components/ui/ImageCropper'));
+const VideoPlayer = lazy(() => import('../../components/ui/VideoPlayer'));
 import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
 import PollDisplay from '../../components/ui/PollDisplay';
 import LinkifiedText from '../../components/ui/LinkifiedText';
 import MentionInput from '../../components/ui/MentionInput';
 import { useScrollLock } from '../../hooks/useScrollLock';
-import VideoPlayer from '../../components/ui/VideoPlayer';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { getPersonaDisplay } from '../../lib/confessions';
 import { togglePostReaction, getUserReaction, REACTION_TYPES, REACTION_KEYS, ReactionType } from '../../lib/reactions';
@@ -31,6 +32,15 @@ import { usePublicClubs, joinClub } from '../../lib/clubs';
 import { savePost, unsavePost } from '../../lib/saves';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { notifyMentionedUsers } from '../../lib/mentions';
+
+// Minimal spinner used as Suspense fallback for lazy components
+const LazyFallback = () => (
+  <div className="flex items-center justify-center p-4">
+    <div className="w-5 h-5 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+
 
 
 interface Post {
@@ -515,10 +525,12 @@ function PostDetailModal({
           {/* Video */}
           {(post as any).videoUrl && (
             <div className="relative mb-6 w-full rounded-2xl overflow-hidden bg-black">
-              <VideoPlayer
-                src={(post as any).videoUrl}
-                className="w-full h-auto max-h-[60vh] object-contain"
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <VideoPlayer
+                  src={(post as any).videoUrl}
+                  className="w-full h-auto max-h-[60vh] object-contain"
+                />
+              </Suspense>
             </div>
           )}
 
@@ -2935,13 +2947,16 @@ export default function Feed() {
 
       {/* ─── Image Cropper ──────────────────────────────── */}
       {cropImageSrc && (
-        <ImageCropper
-          imageSrc={cropImageSrc}
-          onCropComplete={handleCropComplete}
-          onCancel={handleCropCancel}
-          aspect={1}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <ImageCropper
+            imageSrc={cropImageSrc}
+            onCropComplete={handleCropComplete}
+            onCancel={handleCropCancel}
+            aspect={1}
+          />
+        </Suspense>
       )}
+
       {/* ─── Share Modal ──────────────────────────────── */}
       <ShareModal
         isOpen={shareModalData.isOpen}

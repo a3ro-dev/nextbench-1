@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import PollDisplay from './PollDisplay';
 import { useNavigate } from 'react-router-dom';
 import { Heart, MessageCircle, Share2, Bookmark, Flag, Flame, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
-import PdfViewer, { PdfPreview } from './PdfViewer';
+// Lazy-load heavy renderers — only needed for posts with PDF or video content
+const PdfViewer = lazy(() => import('./PdfViewer'));
+const PdfPreview = lazy(() => import('./PdfViewer').then(m => ({ default: m.PdfPreview })));
+const VideoPlayer = lazy(() => import('./VideoPlayer'));
 import { motion, AnimatePresence } from 'motion/react';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { POST_TYPES } from '../../pages/Dashboard/Feed';
 import { getPersonaDisplay } from '../../lib/confessions';
 import ReportModal from './ReportModal';
 import LinkifiedText from './LinkifiedText';
-import VideoPlayer from './VideoPlayer';
 import { useToast } from '../../lib/ToastContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+
+const LazyFallback = () => (
+  <div className="flex items-center justify-center p-4">
+    <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 interface Post {
   id: string;
@@ -288,15 +296,21 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
 
         {/* PDF Preview + Full Viewer */}
         {post.pdfUrl && (
-          <PdfPreview pdfUrl={post.pdfUrl} totalPages={post.pdfPages || 1} title={post.title} />
+          <Suspense fallback={<LazyFallback />}>
+            <PdfPreview pdfUrl={post.pdfUrl} totalPages={post.pdfPages || 1} title={post.title} />
+          </Suspense>
         )}
+
 
         {/* Video */}
         {(post as any).videoUrl && (
           <div className="relative mt-2 mb-6 w-full">
-            <VideoPlayer src={(post as any).videoUrl} />
+            <Suspense fallback={<LazyFallback />}>
+              <VideoPlayer src={(post as any).videoUrl} />
+            </Suspense>
           </div>
         )}
+
 
         {/* Action Bar */}
         <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-y-4" style={{ borderColor: 'var(--color-border)' }}>
