@@ -200,7 +200,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         <div className="mb-3" onClick={handleProfileClick}>
           <div className="flex items-center gap-2 min-w-0">
             {/* Avatar */}
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold overflow-hidden shrink-0 ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold overflow-hidden shrink-0 ring-1 ring-inset ring-luxury-ink/[0.06] ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
               {!displayInfo.isAnonymous && liveProfilePicture ? (
                 <img src={getOptimizedImageUrl(liveProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
 
@@ -228,18 +228,18 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
           </div>
         </div>
 
-        {/* Title */}
+        {/* Title — Playfair Display, editorial */}
         {post.title && (
-          <h3 className="text-[17px] md:text-[19px] font-semibold text-luxury-ink/90 leading-snug tracking-normal mb-2 wrap-break-word">
+          <h3 className="font-serif text-[21px] md:text-[25px] font-semibold text-luxury-ink leading-[1.25] tracking-[-0.01em] mb-2.5 wrap-break-word">
             {post.title}
           </h3>
         )}
 
-        {/* Content Preview */}
+        {/* Content Preview — Source Serif 4, comfortable reading rhythm */}
         <div className="mb-5">
-          <LinkifiedText 
-            text={post.content} 
-            className="text-[15px] md:text-[16px] text-luxury-ink/60 leading-relaxed font-normal line-clamp-4 wrap-break-word overflow-wrap-anywhere block" 
+          <LinkifiedText
+            text={post.content}
+            className="font-reading text-[17px] md:text-[18px] text-luxury-ink/75 leading-[1.7] font-normal line-clamp-5 wrap-break-word overflow-wrap-anywhere block"
           />
         </div>
 
