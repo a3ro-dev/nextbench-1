@@ -443,8 +443,19 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'city', 'privacy', 'updatedAt'])
           && incoming().updatedAt == request.time)
         ||
-        // Any verified user can update upvotes, downvotes, replies, reactions counts, and poll votes
-        (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'repliesCount', 'reactionsCount', 'poll', 'updatedAt']))
+        // Any verified user can update vote/reply counts, reactions, and poll votes.
+        // Numeric counters may only move by +/-1 per write so they cannot be set to
+        // arbitrary values (e.g. upvotesCount = 1000000). Non-numeric or absent values
+        // make the arithmetic fail and the rule denies.
+        // NOTE: the `reactionsCount` and `poll` maps are still fully rewritable here
+        // and need a server-side/transactional guard — see thingstofix.md 8.6 / 5.1.
+        (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'repliesCount', 'reactionsCount', 'poll', 'updatedAt'])
+          && (incoming().get('upvotesCount', 0) - existing().get('upvotesCount', 0)) >= -1
+          && (incoming().get('upvotesCount', 0) - existing().get('upvotesCount', 0)) <= 1
+          && (incoming().get('downvotesCount', 0) - existing().get('downvotesCount', 0)) >= -1
+          && (incoming().get('downvotesCount', 0) - existing().get('downvotesCount', 0)) <= 1
+          && (incoming().get('repliesCount', 0) - existing().get('repliesCount', 0)) >= -1
+          && (incoming().get('repliesCount', 0) - existing().get('repliesCount', 0)) <= 1)
         ||
         (isAdmin() && incoming().updatedAt == request.time)
       );
