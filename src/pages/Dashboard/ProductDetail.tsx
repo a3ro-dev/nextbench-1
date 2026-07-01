@@ -13,6 +13,7 @@ import { createNotification } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { useScrollLock } from '../../hooks/useScrollLock';
 import ShareModal from '../../components/ui/ShareModal';
+import { useBlockStatus } from '../../lib/blocks';
 
 interface ProductData {
   id: string;
@@ -265,8 +266,30 @@ export default function ProductDetail() {
     finally { setSubmittingReview(false); }
   };
 
+  // Block check: must be called unconditionally (Rules of Hooks)
+  const { isBlocked: iBlockedSeller, isBlockedBy: sellerBlockedMe } = useBlockStatus(product?.sellerId);
+
   if (loading) return <div className="pt-32 text-center text-xs font-bold uppercase tracking-widest text-brand-teal/40">Loading Item...</div>;
-  if (!product) return <div className="pt-32 text-center text-xs font-bold uppercase tracking-widest text-red-400">Product Not Found</div>;
+
+  if (!product || iBlockedSeller || sellerBlockedMe) {
+    return (
+      <div className="pt-32 pb-20 px-6 max-w-lg mx-auto text-center">
+        <div className="theme-card rounded-3xl p-16">
+          <div className="text-6xl mb-6">🔍</div>
+          <h2 className="text-2xl font-bold text-luxury-ink mb-3">Product Not Found</h2>
+          <p className="text-luxury-ink/50 text-sm mb-8">
+            This listing may have been removed or doesn't exist.
+          </p>
+          <a
+            href="/dashboard"
+            className="inline-block bg-brand-teal text-white px-8 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-brand-pink transition-colors"
+          >
+            Back to Home
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   const isSeller = user?.uid === product.sellerId;
   const isReserved = product.status === 'reserved';

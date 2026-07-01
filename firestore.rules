@@ -259,13 +259,35 @@ service cloud.firestore {
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
-      // Update: must be a member
-      allow update: if isVerified()
-        && (request.auth.uid in existing().memberIds
-            // Allow non-members to add themselves (join)
-            || (incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'memberCount', 'updatedAt'])
-                && request.auth.uid in incoming().memberIds))
-        && incoming().updatedAt == request.time;
+      // Update: scoped by role. Previously ANY member could rewrite ANY field,
+      // allowing club takeover (changing leadId/inviteCode/type) and tampering
+      // with other members. Now leads/co-leads manage the club; members may only
+      // post message previews, leave (removing only themselves), or join.
+      allow update: if isVerified() && isValidId(clubId)
+        && incoming().updatedAt == request.time
+        && (
+          // Lead or co-lead: full management (rename, settings, roles, invite
+          // code, add/remove members, transfer leadership)
+          (request.auth.uid == existing().leadId || request.auth.uid in existing().get('coLeadIds', []))
+          ||
+          // Member: update last-message preview / pinned message only
+          (request.auth.uid in existing().memberIds
+            && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastSenderId', 'lastSenderName', 'pinnedMessageId', 'pinnedMessageText', 'updatedAt']))
+          ||
+          // Member: leave the club — may remove only themselves
+          (request.auth.uid in existing().memberIds
+            && incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'coLeadIds', 'memberCount', 'updatedAt'])
+            && !(request.auth.uid in incoming().memberIds)
+            && existing().memberIds.hasAll(incoming().memberIds)
+            && incoming().memberIds.size() == existing().memberIds.size() - 1)
+          ||
+          // Non-member: join — may add only themselves, cannot drop existing members
+          (!(request.auth.uid in existing().memberIds)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'memberCount', 'updatedAt'])
+            && request.auth.uid in incoming().memberIds
+            && incoming().memberIds.hasAll(existing().memberIds)
+            && incoming().memberIds.size() == existing().memberIds.size() + 1)
+        );
 
       // Delete: lead only
       allow delete: if isVerified() && request.auth.uid == existing().leadId;
@@ -280,8 +302,19 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds
           && incoming().createdAt == request.time;
 
+        // Previously any member could overwrite ANY field of another member's
+        // message. Now: anyone may toggle deleted-for-self or a reaction, but
+        // only the original sender can delete-for-everyone or edit the body.
         allow update: if isVerified()
-          && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds;
+          && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['deletedFor'])
+            ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])
+            ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['isDeletedForEveryone', 'text', 'image'])
+              && request.auth.uid == existing().senderId)
+          );
       }
     }
 

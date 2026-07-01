@@ -210,6 +210,8 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
 
   const sendMessage = async (text?: string, image?: string) => {
     if ((!text?.trim() && !image) || !user || !roomId) return;
+    // Block guard — prevent sending when any block exists
+    if (isBlocked) return;
 
     const messageText = text?.trim();
     setNewMessage('');
@@ -423,6 +425,32 @@ export default function ChatRoom({ panelMode, onBack, roomIdOverride }: ChatRoom
       <p className="text-luxury-ink/30 text-xs font-bold uppercase tracking-widest">Loading conversation...</p>
     </div>
   );
+
+  // Instagram-style: if the other user blocked us, show "User Not Found"
+  if (hasBlockedMe) {
+    return (
+      <div className={panelMode ? "flex flex-col h-full bg-surface-base overflow-hidden" : "fixed inset-0 z-100 flex flex-col bg-surface-base pb-64px md:pb-0"}>
+        <div className="theme-card border-b px-4 md:px-6 py-3 flex items-center z-10" style={{ borderColor: 'var(--color-border)' }}>
+          <button onClick={() => onBack ? onBack() : navigate('/messages')} className="p-2 hover:bg-surface-soft rounded-full transition-all">
+            <ArrowLeft size={20} className="text-luxury-ink" />
+          </button>
+          <div className="flex items-center gap-3 ml-1">
+            <div className="w-10 h-10 rounded-xl bg-luxury-ink/5 flex items-center justify-center border border-luxury-ink/5">
+              <User size={20} className="text-luxury-ink/30" />
+            </div>
+            <span className="font-bold text-luxury-ink/40 text-sm">Nextbench User</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center">
+            <div className="text-5xl mb-4">🔍</div>
+            <h3 className="text-lg font-bold text-luxury-ink mb-2">User Not Found</h3>
+            <p className="text-sm text-luxury-ink/40">This user is no longer available.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const otherUserProfileUrl = profileUrl(otherUser, roomData?.participants?.find(id => id !== user?.uid));
 

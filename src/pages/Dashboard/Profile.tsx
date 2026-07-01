@@ -14,6 +14,7 @@ import { followUser, unfollowUser, useFollowStatus, useFollowCounts, useMutualFo
 import { getOrCreateDMRoom } from '../../lib/dm';
 import { useScrollLock } from '../../hooks/useScrollLock';
 import { useBlockStatus, blockUser, unblockUser } from '../../lib/blocks';
+import { AlertTriangle } from 'lucide-react';
 import { useUserPresence } from '../../lib/presence';
 import UsernameSetup from '../../components/ui/UsernameSetup';
 import ReportModal from '../../components/ui/ReportModal';
@@ -123,6 +124,7 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // Profile Picture Menu & Modal system
@@ -138,7 +140,7 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
-  useScrollLock(isEditing || showFollowersModal || showFollowingModal || showMutualsModal || !!selectedPost || showUsernameSetup || showReportModal || showSettingsModal || showPfpLightbox || showPfpUploadModal);
+  useScrollLock(isEditing || showFollowersModal || showFollowingModal || showMutualsModal || !!selectedPost || showUsernameSetup || showReportModal || showSettingsModal || showPfpLightbox || showPfpUploadModal || showBlockConfirm);
 
   // Determine the actual userId to display
   const effectiveUserId = usernameResolvedUserId || routeUserId;
@@ -565,12 +567,21 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
       showToast('Only verified students can send direct messages.', 'warning'); 
       return;
     }
+    // Block guard — prevent DM initiation when blocked
+    if (isBlocked || isBlockedBy) {
+      showToast('Cannot message this user.', 'error');
+      return;
+    }
     setIsDMing(true);
     try {
       const roomId = await getOrCreateDMRoom(user.uid, targetUserId);
       navigate(`/messages/${roomId}`, { state: { otherUser: { ...profileUser, id: targetUserId } } });
-    } catch (err) {
-      showToast('Failed to start conversation', 'error');
+    } catch (err: any) {
+      if (err?.message?.includes('BLOCKED')) {
+        showToast('Cannot message this user.', 'error');
+      } else {
+        showToast('Failed to start conversation', 'error');
+      }
     } finally {
       setIsDMing(false);
     }
@@ -578,26 +589,43 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
 
   // ─── Block Handlers ─────────────────────────────────────
 
-  const handleBlock = async () => {
+  const handleBlockClick = () => {
     if (!user || !targetUserId) return;
     if (!userData?.verified) {
       showToast('You must be verified to block users.', 'error');
       return;
     }
+    if (isBlocked) {
+      // Unblock immediately — no confirmation needed
+      handleUnblock();
+    } else {
+      // Show confirmation dialog before blocking
+      setShowBlockConfirm(true);
+      setShowMoreMenu(false);
+    }
+  };
+
+  const handleConfirmBlock = async () => {
+    if (!user || !targetUserId) return;
+    setShowBlockConfirm(false);
     try {
-      if (isBlocked) {
-        await unblockUser(user.uid, targetUserId);
-        showToast('User unblocked', 'info');
-      } else {
-        await blockUser(user.uid, targetUserId);
-        showToast('User blocked', 'info');
-        if (isFollowing) {
-          await unfollowUser(user.uid, targetUserId);
-        }
-      }
+      // blockUser() handles bidirectional unfollow automatically
+      await blockUser(user.uid, targetUserId);
+      showToast('User blocked', 'info');
       setShowMoreMenu(false);
     } catch {
-      showToast('Failed to update block', 'error');
+      showToast('Failed to block user', 'error');
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!user || !targetUserId) return;
+    try {
+      await unblockUser(user.uid, targetUserId);
+      showToast('User unblocked', 'info');
+      setShowMoreMenu(false);
+    } catch {
+      showToast('Failed to unblock user', 'error');
     }
   };
 
@@ -721,12 +749,21 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
   // ─── Blocked States ─────────────────────────────────────
 
   if (!isOwnProfile && isBlockedBy) {
+    // Instagram-style: show "User Not Found" so the blocked user can't tell they're blocked
     return (
       <div className="pt-32 pb-20 px-6 max-w-lg mx-auto text-center">
         <div className="theme-card rounded-3xl p-16">
-          <div className="text-5xl mb-6">🚫</div>
-          <h2 className="text-2xl font-bold text-luxury-ink mb-3">Profile Unavailable</h2>
-          <p className="text-luxury-ink/50 text-sm">This profile is not available.</p>
+          <div className="text-6xl mb-6">🔍</div>
+          <h2 className="text-2xl font-bold text-luxury-ink mb-3">User Not Found</h2>
+          <p className="text-luxury-ink/50 text-sm mb-8">
+            This user doesn't exist on Nextbench.
+          </p>
+          <a
+            href="/dashboard"
+            className="inline-block bg-brand-teal text-white px-8 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-brand-pink transition-colors"
+          >
+            Back to Home
+          </a>
         </div>
       </div>
     );
@@ -738,9 +775,9 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
         <div className="theme-card rounded-3xl p-16">
           <Ban className="mx-auto text-luxury-ink/20 mb-6" size={48} />
           <h2 className="text-2xl font-bold text-luxury-ink mb-3">User Blocked</h2>
-          <p className="text-luxury-ink/50 text-sm mb-8">You have blocked this user.</p>
+          <p className="text-luxury-ink/50 text-sm mb-8">You have blocked this user. They can't see your profile, posts, or message you.</p>
           <button
-            onClick={handleBlock}
+            onClick={handleUnblock}
             className="bg-brand-teal text-white px-8 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-brand-pink transition-colors"
           >
             Unblock
@@ -927,16 +964,19 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
                 >
                   {isFollowing ? 'Following' : 'Follow'}
                 </button>
-                <button onClick={handleDM} disabled={isDMing} className="flex items-center justify-center w-10 h-10 rounded-full text-luxury-ink hover:bg-luxury-ink/5 transition-all disabled:opacity-50" style={{ border: '1px solid var(--color-border)' }}>
-                  <MessageSquare size={18} />
-                </button>
+                {/* Hide DM button when there's a block relationship */}
+                {!isBlocked && !isBlockedBy && (
+                  <button onClick={handleDM} disabled={isDMing} className="flex items-center justify-center w-10 h-10 rounded-full text-luxury-ink hover:bg-luxury-ink/5 transition-all disabled:opacity-50" style={{ border: '1px solid var(--color-border)' }}>
+                    <MessageSquare size={18} />
+                  </button>
+                )}
                 <div className="relative" ref={moreMenuRef}>
                   <button onClick={() => setShowMoreMenu(!showMoreMenu)} className="flex items-center justify-center w-10 h-10 rounded-full text-luxury-ink/60 hover:bg-luxury-ink/5 transition-all" style={{ border: '1px solid var(--color-border)' }}>
                     <MoreHorizontal size={18} />
                   </button>
                   {showMoreMenu && (
                     <motion.div initial={{ opacity: 0, scale: 0.95, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="absolute right-0 top-12 w-52 rounded-2xl shadow-2xl overflow-hidden z-50" style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}>
-                      <button onClick={handleBlock} className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors text-left">
+                      <button onClick={handleBlockClick} className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-luxury-ink hover:bg-surface-soft transition-colors text-left">
                         <Ban size={16} className={isBlocked ? 'text-brand-mint' : 'text-red-500'} />
                         {isBlocked ? 'Unblock User' : 'Block User'}
                       </button>
@@ -1577,6 +1617,53 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
                     </div>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ─── Block Confirmation Modal ─────────────────── */}
+      <AnimatePresence>
+        {showBlockConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6"
+            onClick={() => setShowBlockConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-sm rounded-3xl p-8 text-center"
+              style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-5">
+                <Ban className="text-red-500" size={28} />
+              </div>
+              <h3 className="text-xl font-bold text-luxury-ink mb-2">
+                Block {profileUser?.name?.split(' ')[0] || 'this user'}?
+              </h3>
+              <p className="text-sm text-luxury-ink/50 mb-6 leading-relaxed">
+                They won't be able to see your profile, posts, listings, or message you. They won't be notified that you blocked them.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={handleConfirmBlock}
+                  className="w-full py-3 rounded-2xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors"
+                >
+                  Block
+                </button>
+                <button
+                  onClick={() => setShowBlockConfirm(false)}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-luxury-ink/60 hover:bg-surface-soft transition-colors"
+                  style={{ border: '1px solid var(--color-border)' }}
+                >
+                  Cancel
+                </button>
               </div>
             </motion.div>
           </motion.div>

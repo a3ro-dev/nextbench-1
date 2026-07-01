@@ -14,6 +14,7 @@ import { createNotification } from '../../lib/notifications';
 import { notifyMentionedUsers } from '../../lib/mentions';
 import { getPersonaDisplay } from '../../lib/confessions';
 import { getUserReaction, togglePostReaction, ReactionType } from '../../lib/reactions';
+import { useAllBlockedUserIds } from '../../lib/blocks';
 import PollDisplay from '../ui/PollDisplay';
 import MentionInput from '../ui/MentionInput';
 import type { Post } from '../../pages/Dashboard/Feed';
@@ -224,6 +225,7 @@ export default function PostDetailModal({
 }: PostDetailModalProps) {
   const { user, userData } = useAuth();
   const { showToast } = useToast();
+  const allBlockedIds = useAllBlockedUserIds();
 
   // ─── Reply state (owned locally — see component note above) ───
   const [replies, setReplies] = useState<any[]>([]);
@@ -254,12 +256,15 @@ export default function PostDetailModal({
   const repliesMap = useMemo(() => {
     const map: Record<string, any[]> = {};
     replies.forEach(r => {
+      // Filter out comments from blocked users
+      if (allBlockedIds.has(r.authorId)) return;
+
       const parentId = r.parentId || 'root';
       if (!map[parentId]) map[parentId] = [];
       map[parentId].push(r);
     });
     return map;
-  }, [replies]);
+  }, [replies, allBlockedIds]);
 
   const [commentSort, setCommentSort] = useState<'recent' | 'top' | 'discussed'>('recent');
 

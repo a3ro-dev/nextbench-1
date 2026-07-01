@@ -7,6 +7,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, deleteDo
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../lib/ToastContext';
 import { isChatMessageNotification } from '../../lib/notifications';
+import { useAllBlockedUserIds } from '../../lib/blocks';
 
 interface Notification {
   id: string;
@@ -39,6 +40,7 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'all' | 'deals' | 'social' | 'system'>('all');
+  const allBlockedIds = useAllBlockedUserIds();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     deals: false,
     social: false,
@@ -63,7 +65,21 @@ export default function Notifications() {
     }));
   };
 
+  // Extract userId from notification link (e.g., /profile/{uid}) for block filtering
+  const extractUserIdFromLink = (link?: string): string | null => {
+    if (!link) return null;
+    const profileMatch = link.match(/\/profile\/([^/]+)/);
+    if (profileMatch) return profileMatch[1];
+    const usernameMatch = link.match(/\/u\/([^/]+)/);
+    if (usernameMatch) return usernameMatch[1]; // username, not uid — can't block filter by this
+    return null;
+  };
+
   const filteredNotifications = notifications.filter(n => {
+    // Block filter: hide notifications from blocked users
+    const linkedUserId = extractUserIdFromLink(n.link);
+    if (linkedUserId && allBlockedIds.has(linkedUserId)) return false;
+
     if (activeFilter === 'all') return true;
     if (activeFilter === 'deals') return isDeals(n.type);
     if (activeFilter === 'social') return isSocial(n.type);

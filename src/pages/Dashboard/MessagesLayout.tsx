@@ -15,7 +15,7 @@ import { handleFirestoreError, OperationType } from '../../lib/firestore-errors'
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { getOrCreateDMRoom } from '../../lib/dm';
 import { useScrollLock } from '../../hooks/useScrollLock';
-import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
+import { useAllBlockedUserIds } from '../../lib/blocks';
 import { useUserClubs, createClub } from '../../lib/clubs';
 import { useToast } from '../../lib/ToastContext';
 import ChatRoom from './ChatRoom';
@@ -67,8 +67,7 @@ export default function MessagesLayout() {
   const [creatingClub, setCreatingClub] = useState(false);
 
   const { clubs, loading: clubsLoading } = useUserClubs(user?.uid);
-  const blockedIds = useBlockedIds();
-  const blockedByIds = useBlockedByIds();
+  const allBlockedIds = useAllBlockedUserIds();
 
   useScrollLock(showNewDM || showCreateClub);
 
@@ -123,7 +122,7 @@ export default function MessagesLayout() {
         for (const roomDoc of snapshot.docs) {
           const data = roomDoc.data() as ChatRoomItem;
           const otherUserId = data.participants.find(id => id !== user.uid);
-          if (otherUserId) {
+          if (otherUserId && !allBlockedIds.has(otherUserId)) {
             rooms.push({ id: roomDoc.id, ...data, otherUser: userCache[otherUserId] });
           }
         }
@@ -163,7 +162,11 @@ export default function MessagesLayout() {
 
     const unsub = onSnapshot(q, (snap) => {
       const results: any[] = [];
-      snap.forEach(d => { if (d.id !== user?.uid) results.push({ id: d.id, ...d.data() }); });
+      snap.forEach(d => { 
+        if (d.id !== user?.uid && !allBlockedIds.has(d.id)) {
+          results.push({ id: d.id, ...d.data() }); 
+        }
+      });
       setUserResults(results);
       setSearchingUsers(false);
     }, (err) => { console.error(err); setSearchingUsers(false); });
@@ -180,8 +183,12 @@ export default function MessagesLayout() {
       setSearchUsers('');
       const u = userResults.find(u => u.id === otherUserId);
       openChat(roomId, { otherUser: u });
-    } catch (err) {
-      console.error('Failed to create DM:', err);
+    } catch (err: any) {
+      if (err?.message?.includes('BLOCKED')) {
+        showToast('Cannot message this user.', 'error');
+      } else {
+        console.error('Failed to create DM:', err);
+      }
     } finally {
       setCreatingDM(false);
     }
