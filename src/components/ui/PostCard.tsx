@@ -169,11 +169,11 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
   return (
     <>
       <motion.article
-        layout
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0 }}
-        className={`post-card-clean relative p-4 sm:p-6 md:p-8 flex flex-col w-full min-w-0 overflow-x-hidden ${post.type === 'confession' ? 'is-confession' : ''}`}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        className={`post-card-clean relative p-5 sm:p-6 md:p-8 flex flex-col w-full min-w-0 overflow-x-hidden ${post.type === 'confession' ? 'is-confession' : ''}`}
         onDoubleClick={handleDoubleClick}
       >
         {/* Big center heart burst, Instagram-style double-tap feedback */}
@@ -200,7 +200,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         <div className="mb-3" onClick={handleProfileClick}>
           <div className="flex items-center gap-2 min-w-0">
             {/* Avatar */}
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold overflow-hidden shrink-0 ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold overflow-hidden shrink-0 ring-1 ring-inset ring-luxury-ink/[0.06] ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
               {!displayInfo.isAnonymous && liveProfilePicture ? (
                 <img src={getOptimizedImageUrl(liveProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
 
@@ -208,17 +208,17 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
             </div>
             
             <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
-              <span className="text-[13px] sm:text-[14px] font-semibold text-luxury-ink hover:underline cursor-pointer truncate max-w-30 sm:max-w-180px">{displayInfo.name}</span>
+              <span className="text-[13px] sm:text-[14px] font-semibold text-luxury-ink hover:underline cursor-pointer truncate max-w-[7.5rem] sm:max-w-[11rem]">{displayInfo.name}</span>
               <span className="text-[13px] text-luxury-ink/40">·</span>
               <span className="text-[13px] sm:text-[14px] text-luxury-ink/50 font-medium shrink-0">{timeAgo(post.createdAt)}</span>
               <span className="text-[13px] text-luxury-ink/40 hidden sm:inline">·</span>
-              <span className="text-[13px] sm:text-[14px] text-luxury-ink/50 font-medium truncate max-w-100px sm:max-w-180px hidden sm:inline">{displayInfo.school}</span>
+              <span className="text-[13px] sm:text-[14px] text-luxury-ink/50 font-medium truncate max-w-[6rem] sm:max-w-[11rem] hidden sm:inline">{displayInfo.school}</span>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
               {post.isHot && (
                 <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-500 rounded text-[10px] font-bold uppercase tracking-wide">
-                  <Flame size={10} /> Hot
+                  <Flame size={10} strokeWidth={2} /> Hot
                 </span>
               )}
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${post.type === 'confession' ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
@@ -237,9 +237,9 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
 
         {/* Content Preview */}
         <div className="mb-5">
-          <LinkifiedText 
-            text={post.content} 
-            className="text-[15px] md:text-[16px] text-luxury-ink/60 leading-relaxed font-normal line-clamp-4 wrap-break-word overflow-wrap-anywhere block" 
+          <LinkifiedText
+            text={post.content}
+            className="text-[15px] md:text-[16px] text-luxury-ink/60 leading-relaxed font-normal line-clamp-5 wrap-break-word overflow-wrap-anywhere block"
           />
         </div>
 
@@ -272,15 +272,15 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
                 {/* Navigation arrows */}
                 <button
                   onClick={prevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 backdrop-blur-sm"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={18} strokeWidth={2} />
                 </button>
                 <button
                   onClick={nextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-black/40 hover:bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 backdrop-blur-sm"
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={18} strokeWidth={2} />
                 </button>
 
                 {/* Bottom dots indicator */}
@@ -315,94 +315,107 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         )}
 
 
-        {/* Action Bar */}
-        <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-y-4" style={{ borderColor: 'var(--color-border)' }}>
-          <div className="flex flex-wrap items-center gap-3 sm:gap-6">
-            <button 
+        {/* Action Bar — unified icon pills, consistent 1.75 stroke */}
+        <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="flex items-center gap-0.5 sm:gap-1.5 -ml-1.5 text-[14px] font-semibold">
+            {/* Like */}
+            <button
               onClick={(e) => { e.stopPropagation(); onUpvote?.(post); }}
-              className={`flex items-center gap-1.5 text-[15px] transition-colors group ${hasUpvoted ? 'text-brand-pink font-bold' : 'text-luxury-ink/40 hover:text-brand-pink font-semibold'}`}
+              aria-label="Like"
+              className={`flex items-center gap-0.5 rounded-full transition-colors group ${hasUpvoted ? 'text-brand-pink' : 'text-luxury-ink/45 hover:text-brand-pink'}`}
             >
-              <motion.div
-                className="p-2 rounded-full group-hover:bg-brand-pink/10 transition-colors"
-                whileTap={{ scale: 0.8 }}
+              <motion.span
+                className="grid place-items-center w-10 h-10 rounded-full group-hover:bg-brand-pink/10 transition-colors"
+                whileTap={{ scale: 0.85 }}
               >
-                <motion.div
+                <motion.span
                   key={likeBurst}
                   initial={likeBurst > 0 ? { scale: 0.5 } : false}
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', stiffness: 600, damping: 14 }}
+                  className="grid place-items-center"
                 >
-                  <Heart size={24} className={hasUpvoted ? 'fill-brand-pink' : ''} />
-                </motion.div>
-              </motion.div>
-              {(post.upvotesCount > 0 || true) && (
-                <AnimatePresence mode="popLayout">
-                  <motion.span
-                    key={post.upvotesCount || 0}
-                    initial={{ y: -6, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 6, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="relative -left-1"
-                  >
-                    {post.upvotesCount || 0}
-                  </motion.span>
-                </AnimatePresence>
-              )}
+                  <Heart size={22} strokeWidth={1.75} className={hasUpvoted ? 'fill-brand-pink' : ''} />
+                </motion.span>
+              </motion.span>
+              <AnimatePresence mode="popLayout">
+                <motion.span
+                  key={post.upvotesCount || 0}
+                  initial={{ y: -6, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 6, opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="tabular-nums pr-1.5"
+                >
+                  {post.upvotesCount || 0}
+                </motion.span>
+              </AnimatePresence>
             </button>
-            
-            <button 
+
+            {/* Dislike */}
+            <button
               onClick={(e) => { e.stopPropagation(); onDownvote?.(post); }}
-              className={`flex items-center gap-1.5 text-[15px] transition-colors group ${hasDownvoted ? 'text-indigo-500 font-bold' : 'text-luxury-ink/40 hover:text-indigo-500 font-semibold'}`}
+              aria-label="Dislike"
+              className={`flex items-center gap-0.5 rounded-full transition-colors group ${hasDownvoted ? 'text-indigo-500' : 'text-luxury-ink/45 hover:text-indigo-500'}`}
             >
-              <motion.div className="p-2 rounded-full group-hover:bg-indigo-500/10 transition-colors" whileTap={{ scale: 0.8 }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={hasDownvoted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <motion.span className="grid place-items-center w-10 h-10 rounded-full group-hover:bg-indigo-500/10 transition-colors" whileTap={{ scale: 0.85 }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill={hasDownvoted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
                 </svg>
-              </motion.div>
-              {(post.downvotesCount || 0) > 0 && <span className="relative -left-1">{post.downvotesCount || 0}</span>}
+              </motion.span>
+              {(post.downvotesCount || 0) > 0 && <span className="tabular-nums pr-1.5">{post.downvotesCount || 0}</span>}
             </button>
 
-            <button 
+            {/* Comment */}
+            <button
               onClick={(e) => { e.stopPropagation(); onClick(); }}
-              className="flex items-center gap-2 text-[15px] text-luxury-ink/40 hover:text-brand-teal transition-colors group font-semibold"
+              aria-label="Comments"
+              className="flex items-center gap-0.5 rounded-full text-luxury-ink/45 hover:text-brand-teal transition-colors group"
             >
-              <motion.div whileTap={{ scale: 0.8 }}>
-                <MessageCircle size={24} className="transition-transform group-hover:scale-110" />
-              </motion.div>
-              {(post.repliesCount > 0 || true) && <span>{post.repliesCount || 0}</span>}
+              <motion.span className="grid place-items-center w-10 h-10 rounded-full group-hover:bg-brand-teal/10 transition-colors" whileTap={{ scale: 0.85 }}>
+                <MessageCircle size={22} strokeWidth={1.75} />
+              </motion.span>
+              <span className="tabular-nums pr-1.5">{post.repliesCount || 0}</span>
             </button>
 
-            <button 
+            {/* Share */}
+            <button
               onClick={(e) => { e.stopPropagation(); onShare?.(post); }}
-              className="flex items-center text-[15px] text-luxury-ink/40 hover:text-brand-teal transition-colors group"
+              aria-label="Share"
+              className="flex items-center rounded-full text-luxury-ink/45 hover:text-brand-teal transition-colors group"
             >
-              <motion.div whileTap={{ scale: 0.8 }}>
-                <Share2 size={24} className="transition-transform group-hover:scale-110" />
-              </motion.div>
+              <motion.span className="grid place-items-center w-10 h-10 rounded-full group-hover:bg-brand-teal/10 transition-colors" whileTap={{ scale: 0.85 }}>
+                <Share2 size={22} strokeWidth={1.75} />
+              </motion.span>
             </button>
           </div>
 
-          <div className="flex items-center gap-4">
-            <motion.button 
+          <div className="flex items-center -mr-1.5">
+            {/* Save */}
+            <button
               onClick={(e) => { e.stopPropagation(); onSave?.(post); }}
-              whileTap={{ scale: 0.8 }}
-              className={`transition-colors hover:scale-110 ${hasSaved ? 'text-brand-teal' : 'text-luxury-ink/40 hover:text-brand-teal'}`}
+              aria-label="Save"
+              className={`grid place-items-center rounded-full transition-colors group ${hasSaved ? 'text-brand-teal' : 'text-luxury-ink/45 hover:text-brand-teal'}`}
             >
-              <motion.div
-                key={saveBurst}
-                initial={saveBurst > 0 ? { scale: 0.5 } : false}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 600, damping: 14 }}
-              >
-                <Bookmark size={22} className={hasSaved ? 'fill-brand-teal' : ''} />
-              </motion.div>
-            </motion.button>
+              <motion.span className="grid place-items-center w-10 h-10 rounded-full group-hover:bg-brand-teal/10 transition-colors" whileTap={{ scale: 0.85 }}>
+                <motion.span
+                  key={saveBurst}
+                  initial={saveBurst > 0 ? { scale: 0.5 } : false}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 600, damping: 14 }}
+                  className="grid place-items-center"
+                >
+                  <Bookmark size={21} strokeWidth={1.75} className={hasSaved ? 'fill-brand-teal' : ''} />
+                </motion.span>
+              </motion.span>
+            </button>
+            {/* Report */}
             <button
               onClick={(e) => { e.stopPropagation(); setShowReport(true); }}
-              className="text-luxury-ink/20 hover:text-red-400 hover:scale-110 transition-all"
+              aria-label="Report"
+              className="grid place-items-center w-10 h-10 rounded-full text-luxury-ink/25 hover:text-red-400 hover:bg-red-400/10 transition-colors group"
             >
-              <Flag size={18} />
+              <Flag size={18} strokeWidth={1.75} />
             </button>
           </div>
         </div>

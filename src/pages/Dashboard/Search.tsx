@@ -25,12 +25,14 @@ import { joinClub } from '../../lib/clubs';
 import { useAuth } from '../../lib/AuthContext';
 import { useToast } from '../../lib/ToastContext';
 import { AnimatePresence, motion } from 'motion/react';
+import { useAllBlockedUserIds } from '../../lib/blocks';
 
 
 export default function Search() {
   const { user, userData } = useAuth();
   const { showToast } = useToast();
   const { followingIds } = useFollowingIds();
+  const allBlockedIds = useAllBlockedUserIds();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'posts' | 'products' | 'clubs'>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -84,7 +86,7 @@ export default function Search() {
             
             const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             const fetchedUsers = allUsers
-              .filter((u: any) => u.id !== user?.uid && u.verified === true)
+              .filter((u: any) => u.id !== user?.uid && u.verified === true && !allBlockedIds.has(u.id))
               .map((u: any) => {
                 let score = 0;
                 if (userData?.school && u.school === userData.school) score += 100;
@@ -95,8 +97,8 @@ export default function Search() {
               })
               .sort((a: any, b: any) => b._score - a._score)
               .slice(0, 15);
-            const fetchedPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-            const fetchedProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter((p: any) => p.status === 'available');
+            const fetchedPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter((p: any) => !allBlockedIds.has(p.authorId));
+            const fetchedProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter((p: any) => p.status === 'available' && !allBlockedIds.has(p.sellerId));
             const fetchedClubs = clubsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             
             setSuggestedUsers(fetchedUsers);
@@ -140,7 +142,7 @@ export default function Search() {
               limit(20)
             )
           );
-          const fetchedUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          const fetchedUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter((u: any) => !allBlockedIds.has(u.id));
           setUsers(fetchedUsers);
           setPosts([]);
           setProducts([]);
@@ -163,20 +165,22 @@ export default function Search() {
         const lowerQ = searchQuery.toLowerCase();
 
         let fetchedUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(u => 
+          !allBlockedIds.has(u.id) && (
           !lowerQ || 
           (u.name && u.name.toLowerCase().includes(lowerQ)) || 
           (u.school && u.school.toLowerCase().includes(lowerQ)) ||
-          (u.username && u.username.toLowerCase().includes(lowerQ))
+          (u.username && u.username.toLowerCase().includes(lowerQ)))
         );
         let fetchedPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(p => 
+          !allBlockedIds.has(p.authorId) && (
           (!lowerQ || 
           (p.title && p.title.toLowerCase().includes(lowerQ)) || 
           (p.content && p.content.toLowerCase().includes(lowerQ)) ||
           (p.school && p.school.toLowerCase().includes(lowerQ))) &&
-          (!appliedSchool || p.school === appliedSchool)
+          (!appliedSchool || p.school === appliedSchool))
         );
         let fetchedProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any))
-          .filter((p: any) => p.status === 'available')
+          .filter((p: any) => p.status === 'available' && !allBlockedIds.has(p.sellerId))
           .filter(p => 
             !lowerQ || 
             (p.title && p.title.toLowerCase().includes(lowerQ)) || 

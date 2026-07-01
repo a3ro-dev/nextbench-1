@@ -98,29 +98,29 @@ export const POST_TYPES = [
 // Memoized: it takes no props, so it never needs to re-render once mounted.
 const PostCardSkeleton = React.memo(function PostCardSkeleton() {
   return (
-    <div className="p-4 sm:p-6 md:p-8 flex flex-col w-full border-b animate-pulse" style={{ borderColor: 'var(--color-border)' }}>
+    <div className="p-5 sm:p-6 md:p-8 flex flex-col w-full border-b animate-pulse" style={{ borderColor: 'var(--color-border)' }}>
       {/* Avatar + meta row */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-full bg-luxury-ink/8 shrink-0" />
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="w-9 h-9 rounded-full bg-luxury-ink/8 shrink-0" />
         <div className="flex gap-2 flex-1">
-          <div className="h-3 w-24 rounded-full bg-luxury-ink/8" />
+          <div className="h-3 w-28 rounded-full bg-luxury-ink/8" />
           <div className="h-3 w-10 rounded-full bg-luxury-ink/6" />
         </div>
-        <div className="h-5 w-14 rounded bg-luxury-ink/6" />
+        <div className="h-5 w-16 rounded-full bg-luxury-ink/6" />
       </div>
-      {/* Title */}
-      <div className="h-4 w-2/3 rounded-full bg-luxury-ink/10 mb-3" />
+      {/* Title (serif — taller) */}
+      <div className="h-6 w-3/4 rounded-lg bg-luxury-ink/10 mb-3" />
       {/* Content lines */}
-      <div className="space-y-2 mb-5">
-        <div className="h-3 w-full rounded-full bg-luxury-ink/7" />
-        <div className="h-3 w-5/6 rounded-full bg-luxury-ink/7" />
-        <div className="h-3 w-4/6 rounded-full bg-luxury-ink/6" />
+      <div className="space-y-2.5 mb-6">
+        <div className="h-3.5 w-full rounded-full bg-luxury-ink/7" />
+        <div className="h-3.5 w-11/12 rounded-full bg-luxury-ink/7" />
+        <div className="h-3.5 w-4/6 rounded-full bg-luxury-ink/6" />
       </div>
       {/* Action bar */}
-      <div className="flex items-center gap-6 pt-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="h-3 w-10 rounded-full bg-luxury-ink/8" />
-        <div className="h-3 w-10 rounded-full bg-luxury-ink/8" />
-        <div className="h-3 w-10 rounded-full bg-luxury-ink/8" />
+      <div className="flex items-center gap-5 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="h-8 w-12 rounded-full bg-luxury-ink/8" />
+        <div className="h-8 w-12 rounded-full bg-luxury-ink/8" />
+        <div className="h-8 w-10 rounded-full bg-luxury-ink/8" />
       </div>
     </div>
   );
@@ -1610,52 +1610,33 @@ export default function Feed() {
       )}
 
       {/* Sticky Header Tabs */}
-      <div className="sticky top-0 z-40 nav-glass border-b flex items-center px-4 sm:px-6 gap-1" style={{ borderColor: 'var(--color-border)' }}>
-        <button
-          onClick={() => { setContentType('all'); }}
-          className={`relative py-3.5 px-4 text-sm font-semibold transition-colors whitespace-nowrap ${contentType === 'all' ? 'text-luxury-ink' : 'text-luxury-ink/40 hover:text-luxury-ink/70'}`}
-        >
-          For you
-          {contentType === 'all' && (
-            <motion.div
-              layoutId="feed-tab-underline"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-luxury-ink"
-              transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-            />
-          )}
-        </button>
-        <button
-          onClick={() => { setContentType('posts'); }}
-          className={`relative py-3.5 px-4 text-sm font-semibold transition-colors whitespace-nowrap ${contentType === 'posts' ? 'text-luxury-ink' : 'text-luxury-ink/40 hover:text-luxury-ink/70'}`}
-        >
-          Posts
-          {contentType === 'posts' && (
-            <motion.div
-              layoutId="feed-tab-underline"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-luxury-ink"
-              transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-            />
-          )}
-        </button>
-        <button
-          onClick={() => { setContentType('marketplace'); }}
-          className={`relative py-3.5 px-4 text-sm font-semibold transition-colors whitespace-nowrap ${contentType === 'marketplace' ? 'text-luxury-ink' : 'text-luxury-ink/40 hover:text-luxury-ink/70'}`}
-        >
-          Marketplace
-          {contentType === 'marketplace' && (
-            <motion.div
-              layoutId="feed-tab-underline"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-luxury-ink"
-              transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-            />
-          )}
-        </button>
+      <div className="sticky top-0 z-40 nav-glass border-b flex items-center px-2 sm:px-4 gap-0.5" style={{ borderColor: 'var(--color-border)' }}>
+        {([
+          { id: 'all', label: 'For you' },
+          { id: 'posts', label: 'Posts' },
+          { id: 'marketplace', label: 'Marketplace' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => { setContentType(tab.id); }}
+            className={`relative py-4 px-3 sm:px-4 text-sm font-semibold transition-colors whitespace-nowrap rounded-t-lg ${contentType === tab.id ? 'text-luxury-ink' : 'text-luxury-ink/40 hover:text-luxury-ink/70 hover:bg-surface-soft/50'}`}
+          >
+            {tab.label}
+            {contentType === tab.id && (
+              <motion.div
+                layoutId="feed-tab-underline"
+                className="absolute -bottom-px left-2 right-2 sm:left-3 sm:right-3 h-[3px] rounded-full bg-brand-pink"
+                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+              />
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* Compose Bar — LinkedIn style */}
+      {/* Compose Bar */}
       {user && userData?.verified && (
         <div className="border-b px-4 py-3 flex items-center gap-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-card)' }}>
-          <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden shrink-0">
+          <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-inset ring-luxury-ink/[0.06]">
             {userData?.profilePicture ? (
               <img src={getOptimizedImageUrl(userData.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
 
@@ -1665,10 +1646,11 @@ export default function Feed() {
           </div>
           <button
             onClick={() => { setIsModalOpen(true); preloadModerationModel(); }}
-            className="flex-1 text-left px-4 py-2.5 rounded-full border text-sm text-luxury-ink/40 hover:bg-surface-soft transition-colors"
+            className="flex-1 flex items-center justify-between gap-2 text-left pl-4 pr-3 py-2.5 rounded-full border text-sm text-luxury-ink/40 hover:bg-surface-soft hover:border-luxury-ink/15 transition-colors"
             style={{ borderColor: 'var(--color-border)' }}
           >
-            What's on your mind?
+            <span>What's on your mind?</span>
+            <Pencil size={15} strokeWidth={2} className="shrink-0 text-luxury-ink/30" />
           </button>
         </div>
       )}
@@ -1677,9 +1659,10 @@ export default function Feed() {
       {user && userData?.verified && (
         <button
           onClick={() => { setIsModalOpen(true); preloadModerationModel(); }}
-          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-brand-teal text-white rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
+          aria-label="Create post"
+          className="fixed bottom-24 right-4 sm:hidden z-50 flex items-center justify-center w-14 h-14 bg-brand-teal text-white rounded-full shadow-lg shadow-brand-teal/30 hover:scale-105 active:scale-95 transition-transform"
         >
-          <Plus size={24} />
+          <Plus size={24} strokeWidth={2} />
         </button>
       )}
 
@@ -1728,7 +1711,7 @@ export default function Feed() {
 
           {!user && combinedFeed.length > 0 && !hasMorePosts && !hasMoreProducts && (
             <div className="py-12 px-6 flex flex-col items-center justify-center text-center border-t mt-4 relative z-10" style={{ borderColor: 'var(--color-border)' }}>
-              <Lock className="w-12 h-12 text-luxury-ink/20 mb-4" />
+              <Lock className="w-12 h-12 text-luxury-ink/20 mb-4" strokeWidth={1.75} />
               <h3 className="text-xl font-bold text-luxury-ink mb-2">You've reached the end of your preview</h3>
               <p className="text-luxury-ink/50 text-sm max-w-sm mb-6">
                 Sign up for free to unlock unlimited posts, full marketplace access, and join the community.
@@ -1741,11 +1724,11 @@ export default function Feed() {
 
           {!loading && combinedFeed.length === 0 && (
             <div className="py-20 text-center px-4">
-              <GraduationCap className="mx-auto text-luxury-ink/10 mb-4" size={48} />
+              <GraduationCap className="mx-auto text-luxury-ink/10 mb-4" size={48} strokeWidth={1.5} />
               <p className="text-luxury-ink/50 text-base mb-1">
                 {contentType === 'marketplace' ? 'No items listed yet.' : 'No posts yet.'}
               </p>
-              <p className="text-sm text-luxury-ink/30">
+              <p className="text-sm text-luxury-ink/40">
                 {contentType === 'marketplace' ? 'Be the first to list an item!' : 'Be the first to share something!'}
               </p>
 

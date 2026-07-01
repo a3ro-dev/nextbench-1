@@ -4,18 +4,23 @@
  * Collection: `blocks`
  * Doc shape: { blockerId, blockedId, createdAt }
  * Doc ID: `${blockerId}_${blockedId}` for easy lookup
+ *
+ * Instagram-style blocking:
+ * - When A blocks B, B sees A as "User Not Found" everywhere
+ * - Bidirectional unfollow on block
+ * - Block check on DM creation, search, post views, etc.
  */
 
 import { useState, useEffect } from 'react';
 import {
-  doc, setDoc, deleteDoc, serverTimestamp,
-  collection, query, where, onSnapshot
+  doc, setDoc, deleteDoc, serverTimestamp, getDoc,
+  collection, query, where, onSnapshot, getDocs
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { useAuth } from './AuthContext';
 
 /**
- * Block a user
+ * Block a user — also removes follows in both directions
  */
 export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
   const docId = `${blockerId}_${blockedId}`;
@@ -24,6 +29,29 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
     blockedId,
     createdAt: serverTimestamp(),
   });
+
+  // Bidirectional unfollow: remove blocker→blocked AND blocked→blocker follows
+  const [q1, q2] = [
+    query(
+      collection(db, 'follows'),
+      where('followerId', '==', blockerId),
+      where('followingId', '==', blockedId)
+    ),
+    query(
+      collection(db, 'follows'),
+      where('followerId', '==', blockedId),
+      where('followingId', '==', blockerId)
+    ),
+  ];
+
+  const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+  const deletions = [
+    ...snap1.docs.map(d => deleteDoc(d.ref)),
+    ...snap2.docs.map(d => deleteDoc(d.ref)),
+  ];
+  if (deletions.length > 0) {
+    await Promise.all(deletions);
+  }
 }
 
 /**
@@ -32,6 +60,18 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
 export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
   const docId = `${blockerId}_${blockedId}`;
   await deleteDoc(doc(db, 'blocks', docId));
+}
+
+/**
+ * One-shot async check: does a block relationship exist in either direction?
+ * Used for server-side verification (e.g., in DM creation).
+ */
+export async function isBlockRelationship(uid1: string, uid2: string): Promise<boolean> {
+  const [doc1, doc2] = await Promise.all([
+    getDoc(doc(db, 'blocks', `${uid1}_${uid2}`)),
+    getDoc(doc(db, 'blocks', `${uid2}_${uid1}`)),
+  ]);
+  return doc1.exists() || doc2.exists();
 }
 
 /**
@@ -96,6 +136,25 @@ export function useBlockedByIds(): Set<string> {
   }, [user?.uid]);
 
   return blockedByIds;
+}
+
+/**
+ * Hook: combined set of all user IDs involved in any block relationship
+ * (union of blockedIds and blockedByIds). Convenience for filtering.
+ */
+export function useAllBlockedUserIds(): Set<string> {
+  const blockedIds = useBlockedIds();
+  const blockedByIds = useBlockedByIds();
+  const [combined, setCombined] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const s = new Set<string>();
+    blockedIds.forEach(id => s.add(id));
+    blockedByIds.forEach(id => s.add(id));
+    setCombined(s);
+  }, [blockedIds, blockedByIds]);
+
+  return combined;
 }
 
 /**

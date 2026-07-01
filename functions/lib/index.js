@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createNotification = exports.rateLimitReply = exports.rateLimitMessage = exports.rateLimitPost = exports.onUserUpdated = exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
+exports.signCloudinary = exports.createNotification = exports.rateLimitReply = exports.rateLimitMessage = exports.rateLimitPost = exports.onUserUpdated = exports.moderateReply = exports.moderatePost = exports.unsubscribeFromEmails = exports.broadcastEmail = exports.sendWeeklyDigest = exports.notifyOnProductReserved = exports.notifyOnNewMessage = exports.submitInviteCode = exports.createInviteCode = exports.verifyAuthOtpEmail = exports.sendAuthOtpEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -14,6 +14,8 @@ const db = admin.firestore();
 const EMAIL_USER = (0, params_1.defineSecret)("EMAIL_USER");
 const EMAIL_PASS = (0, params_1.defineSecret)("EMAIL_PASS");
 const OTP_HMAC_SECRET = (0, params_1.defineSecret)("OTP_HMAC_SECRET");
+const CLOUDINARY_API_KEY = (0, params_1.defineSecret)("CLOUDINARY_API_KEY");
+const CLOUDINARY_API_SECRET = (0, params_1.defineSecret)("CLOUDINARY_API_SECRET");
 // ─── Disposable / Temp-mail domain blocklist ─────────────────────────────────
 const TEMP_MAIL_DOMAINS = new Set([
     // Major disposable providers
@@ -1114,5 +1116,62 @@ exports.createNotification = (0, https_1.onCall)({ invoker: "public", cors: true
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
     return { success: true, id: notifRef.id };
+});
+// ─── Cloud Function: signCloudinary ──────────────────────────────────────────────
+exports.signCloudinary = (0, https_1.onCall)({ secrets: [CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET], invoker: "public", cors: true }, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "User must be logged in to upload files.");
+    }
+    const uid = request.auth.uid;
+    const { folder, uploadPreset, cloudName } = request.data || {};
+    if (!folder || typeof folder !== "string") {
+        throw new https_1.HttpsError("invalid-argument", "Missing or invalid folder parameter.");
+    }
+    if (!uploadPreset || typeof uploadPreset !== "string") {
+        throw new https_1.HttpsError("invalid-argument", "Missing or invalid uploadPreset parameter.");
+    }
+    if (!cloudName || typeof cloudName !== "string") {
+        throw new https_1.HttpsError("invalid-argument", "Missing or invalid cloudName parameter.");
+    }
+    // 2. Validate Folder (Ensure user can only upload to their own user directories or general shared directories)
+    const isSelfProfile = folder === `nextbench/profiles/${uid}`;
+    const isSelfCover = folder === `nextbench/covers/${uid}`;
+    const isSelfProduct = folder === `nextbench/products/${uid}`;
+    const isGeneralFolder = folder.startsWith("nextbench/chats/") ||
+        folder.startsWith("nextbench/posts/") ||
+        folder.startsWith("nextbench/replies/") ||
+        folder.startsWith("nextbench/school_requests/") ||
+        folder.startsWith("nextbench/org_documents/") ||
+        folder.startsWith("nextbench/clubs/") ||
+        folder.startsWith("nextbench/post_videos/"); // Just in case, though videos use Firebase currently
+    if (!isSelfProfile && !isSelfCover && !isSelfProduct && !isGeneralFolder) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized folder path access.");
+    }
+    // 3. Generate Cloudinary Signature
+    const apiSecret = CLOUDINARY_API_SECRET.value();
+    const apiKey = CLOUDINARY_API_KEY.value();
+    const timestamp = Math.round(Date.now() / 1000);
+    // Sort and sign parameters
+    const paramsToSign = {
+        folder,
+        timestamp,
+        upload_preset: uploadPreset,
+    };
+    const sortedKeys = Object.keys(paramsToSign).sort();
+    const paramString = sortedKeys
+        .map(key => `${key}=${paramsToSign[key]}`)
+        .join("&");
+    const signature = crypto
+        .createHash("sha1")
+        .update(paramString + apiSecret)
+        .digest("hex");
+    return {
+        signature,
+        timestamp,
+        apiKey,
+        cloudName,
+        folder,
+    };
 });
 //# sourceMappingURL=index.js.map

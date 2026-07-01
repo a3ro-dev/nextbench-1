@@ -9,10 +9,12 @@ import {
   collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc, limit, updateDoc, arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { isBlockRelationship } from './blocks';
 
 /**
  * Find an existing DM room between two users, or create a new one.
  * Returns the room ID.
+ * Throws if a block relationship exists between the two users.
  */
 
 export interface SharedPostPayload {
@@ -25,12 +27,19 @@ export interface SharedPostPayload {
 /**
  * Send a shared post/listing as a message into a DM room.
  * Creates the room if it doesn't exist yet.
+ * Throws if a block relationship exists.
  */
 export async function sendSharedPostToUser(
   currentUserId: string,
   otherUserId: string,
   sharedPost: SharedPostPayload
 ): Promise<string> {
+  // Block guard — prevent sharing to/from blocked users
+  const blocked = await isBlockRelationship(currentUserId, otherUserId);
+  if (blocked) {
+    throw new Error('BLOCKED: Cannot send to this user.');
+  }
+
   const roomId = await getOrCreateDMRoom(currentUserId, otherUserId);
 
   await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
@@ -60,6 +69,12 @@ export async function getOrCreateDMRoom(
   currentUserId: string,
   otherUserId: string
 ): Promise<string> {
+  // Block guard — prevent DM room creation when a block exists
+  const blocked = await isBlockRelationship(currentUserId, otherUserId);
+  if (blocked) {
+    throw new Error('BLOCKED: Cannot message this user.');
+  }
+
   // Search for existing DM rooms where both users are participants
   // We query for rooms where the current user is a participant and type is 'dm'
   const q = query(

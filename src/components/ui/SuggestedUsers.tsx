@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { UserCheck, UserPlus, Users, ArrowRight, ShieldCheck } from 'lucide-react';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { useToast } from '../../lib/ToastContext';
+import { useAllBlockedUserIds } from '../../lib/blocks';
 import TrendingSidebar from './TrendingSidebar';
 
 interface SuggestedUser {
@@ -23,6 +24,7 @@ export default function SuggestedUsers() {
   const { user, userData } = useAuth();
   const { showToast } = useToast();
   const { followingIds } = useFollowingIds();
+  const allBlockedIds = useAllBlockedUserIds();
   const [suggestions, setSuggestions] = useState<SuggestedUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -136,7 +138,9 @@ export default function SuggestedUsers() {
           });
         }
 
-        setSuggestions(fetchedUsers.slice(0, 5));
+        // Filter out blocked users before setting suggestions
+        const filtered = fetchedUsers.filter(u => !allBlockedIds.has(u.id));
+        setSuggestions(filtered.slice(0, 5));
       } catch (error) {
         console.error("Error fetching suggestions:", error);
       } finally {

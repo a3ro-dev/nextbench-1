@@ -55,3 +55,5 @@ agents.md
 scratch/
 android/
 capacitor.config.ts
+.vercel
+.env*

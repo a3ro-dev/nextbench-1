@@ -305,28 +305,49 @@
   background: var(--color-surface-soft);
 }
 
-/* Clean post card — E-ink / Medium style */
+/* Clean post card — warm editorial reading style */
 .post-card-clean {
   background: var(--color-surface-card);
   border-bottom: 1px solid var(--color-border);
-  transition: background-color 0.2s ease;
+  transition: background-color 0.25s ease;
   max-width: 100%;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Reading body copy — Source Serif 4 with comfortable rhythm */
+.font-reading {
+  font-family: var(--font-reading);
+  font-optical-sizing: auto;
 }
 
 .overflow-wrap-anywhere {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+/* Barely-there warm wash on hover instead of flat gray — cozier, less harsh */
 .post-card-clean:hover {
-  background: var(--color-surface-soft);
+  background: color-mix(in srgb, var(--color-brand-pink) 2.5%, var(--color-surface-card));
 }
 .post-card-clean.is-confession {
   background: var(--color-confession-bg);
 }
 .post-card-clean.is-confession:hover {
   background: var(--color-confession-bg-hover);
+}
+
+/* ═══════════════════════════════════════════════════
+   REDUCED MOTION — respect OS-level preference
+   ═══════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .theme-input {

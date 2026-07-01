@@ -8,6 +8,7 @@ import { useToast } from '../lib/ToastContext';
 import PostCard from '../components/ui/PostCard';
 import Navbar from '../components/layout/Navbar';
 import ShareModal from '../components/ui/ShareModal';
+import { useBlockStatus } from '../lib/blocks';
 
 export default function PostView() {
   const { postId } = useParams<{ postId: string }>();
@@ -60,6 +61,10 @@ export default function PostView() {
     }
   };
 
+  // Block check: must be called unconditionally (Rules of Hooks)
+  const { isBlocked: iBlockedAuthor, isBlockedBy: authorBlockedMe } = useBlockStatus(post?.authorId);
+  const isBlockRelated = iBlockedAuthor || authorBlockedMe;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
@@ -70,7 +75,7 @@ export default function PostView() {
     );
   }
 
-  if (!post || (post.privacy === 'private' && !user)) {
+  if (!post || (post.privacy === 'private' && !user) || isBlockRelated) {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
