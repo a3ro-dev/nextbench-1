@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, useReducer, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Search, MapPin, School, GraduationCap, Calendar, FileText, Info, ArrowBigUp, MessageSquare, Flame, Share2, Image as ImageIcon, Trash2, Heart, Users, Grid3X3, UserCheck, Bookmark, MoreHorizontal, Globe, Lock, Settings, BarChart3, ChevronLeft, ChevronRight, Paperclip, Film, Pencil } from 'lucide-react';
-import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
 import { useToast } from '../../lib/ToastContext';
@@ -27,7 +27,7 @@ import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { usePublicClubs, joinClub } from '../../lib/clubs';
 import { savePost, unsavePost } from '../../lib/saves';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
-import { getDiscoveryFeed } from '../../lib/discovery';
+import { deletePostCascade, getDiscoveryFeed } from '../../lib/discovery';
 
 // Minimal spinner used as Suspense fallback for lazy components
 const LazyFallback = () => (
@@ -1270,26 +1270,7 @@ export default function Feed() {
       async () => {
         setConfirmDialog(null);
         try {
-          const batch = writeBatch(db);
-
-          const repliesQ = query(collection(db, 'post_replies'), where('postId', '==', postId));
-          const repliesSnap = await getDocs(repliesQ);
-          repliesSnap.forEach(docSnap => batch.delete(docSnap.ref));
-
-          const upvotesQ = query(collection(db, 'post_upvotes'), where('postId', '==', postId));
-          const upvotesSnap = await getDocs(upvotesQ);
-          upvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
-
-          const downvotesQ = query(collection(db, 'post_downvotes'), where('postId', '==', postId));
-          const downvotesSnap = await getDocs(downvotesQ);
-          downvotesSnap.forEach(docSnap => batch.delete(docSnap.ref));
-
-          const reactionsQ = query(collection(db, 'post_reactions'), where('postId', '==', postId));
-          const reactionsSnap = await getDocs(reactionsQ);
-          reactionsSnap.forEach(docSnap => batch.delete(docSnap.ref));
-
-          await batch.commit();
-          await deleteDoc(doc(db, 'posts', postId));
+          await deletePostCascade(postId);
 
           showToast('Post deleted successfully', 'success');
           setSelectedPost(null);

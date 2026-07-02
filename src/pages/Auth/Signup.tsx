@@ -8,6 +8,7 @@ import { httpsCallable } from 'firebase/functions';
 import { doc, setDoc, getDoc, serverTimestamp, collection, getDocs, addDoc, query, where, limit, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../../lib/AuthContext';
 import { uploadSchoolIdCard } from '../../lib/storage';
+import { lookupReferralCode } from '../../lib/discovery';
 
 const SCHOOLS = [
   "Loreto Convent",
@@ -385,12 +386,10 @@ export default function Signup() {
 
         if (referralCode.trim()) {
           try {
-            const q = query(collection(db, 'users'), where('referralCode', '==', referralCode.trim().toUpperCase()), limit(1));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              const referrerDoc = snap.docs[0];
-              userData.referredBy = referrerDoc.id;
-              batch.set(doc(db, 'users', referrerDoc.id, 'referrals', firebaseUser.uid), { timestamp: serverTimestamp() });
+            const referrerId = await lookupReferralCode(referralCode.trim());
+            if (referrerId) {
+              userData.referredBy = referrerId;
+              batch.set(doc(db, 'users', referrerId, 'referrals', firebaseUser.uid), { timestamp: serverTimestamp() });
             }
           } catch (refErr) {
             console.error('Failed to apply referral:', refErr);

@@ -159,6 +159,18 @@ export async function deletePostCascade(postId: string) {
   return result.data;
 }
 
+export async function lookupReferralCode(code: string) {
+  const callable = httpsCallable<{ code: string }, { userId: string | null }>(functions, 'lookupReferralCode');
+  const result = await callable({ code });
+  return result.data.userId;
+}
+
+export async function createInviteCode() {
+  const callable = httpsCallable<Record<string, never>, { code: string }>(functions, 'createInviteCode');
+  const result = await callable({});
+  return result.data.code;
+}
+
 export async function getLandingStats() {
   const callable = httpsCallable<Record<string, never>, { totalUsers: number; totalProducts: number; totalSchools: number }>(functions, 'getLandingStats');
   const result = await callable({});
