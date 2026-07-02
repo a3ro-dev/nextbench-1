@@ -35,6 +35,66 @@ service cloud.firestore {
         && request.auth.uid in data.participants
         && !hasBlockRelationship(request.auth.uid, otherParticipant(data.participants));
     }
+    function postDoc(postId) {
+      return /databases/$(database)/documents/posts/$(postId);
+    }
+    function replyDoc(replyId) {
+      return /databases/$(database)/documents/post_replies/$(replyId);
+    }
+    function productDoc(productId) {
+      return /databases/$(database)/documents/products/$(productId);
+    }
+    function canAccessProduct(data) {
+      return isAdmin()
+        || (isSignedIn() && (request.auth.uid == data.sellerId || !hasBlockRelationship(request.auth.uid, data.sellerId)));
+    }
+    function isPublicPost(data) {
+      return data.status == 'approved' && data.get('privacy', 'public') != 'private';
+    }
+    function canAccessPost(data) {
+      return isSignedIn()
+        && (isAdmin()
+          || request.auth.uid == data.authorId
+          || (isPublicPost(data) && !hasBlockRelationship(request.auth.uid, data.authorId)));
+    }
+    function canInteractWithPost(postId) {
+      return postId is string
+        && exists(postDoc(postId))
+        && canAccessPost(get(postDoc(postId)).data)
+        && !hasBlockRelationship(request.auth.uid, get(postDoc(postId)).data.authorId);
+    }
+    function canAccessReply(data) {
+      return isSignedIn()
+        && data.postId is string
+        && exists(postDoc(data.postId))
+        && canAccessPost(get(postDoc(data.postId)).data)
+        && (isAdmin() || request.auth.uid == data.authorId || !hasBlockRelationship(request.auth.uid, data.authorId));
+    }
+    function canReplyToParent(data) {
+      return !data.keys().hasAny(['parentId'])
+        || data.parentId == null
+        || (data.parentId is string
+          && exists(replyDoc(data.parentId))
+          && canAccessReply(get(replyDoc(data.parentId)).data)
+          && !hasBlockRelationship(request.auth.uid, get(replyDoc(data.parentId)).data.authorId));
+    }
+    function canAccessReview(data) {
+      return isSignedIn()
+        && (isAdmin()
+          || data.reviewerId == request.auth.uid
+          || (data.productId is string
+            && exists(productDoc(data.productId))
+            && canAccessProduct(get(productDoc(data.productId)).data)
+            && !hasBlockRelationship(request.auth.uid, data.reviewerId)));
+    }
+    function canAccessFollow(data) {
+      return isSignedIn()
+        && (isAdmin()
+          || request.auth.uid == data.followerId
+          || request.auth.uid == data.followingId
+          || (!hasBlockRelationship(request.auth.uid, data.followerId)
+            && !hasBlockRelationship(request.auth.uid, data.followingId)));
+    }
 
     function isValidUser(data) {
       return data.keys().hasAll(["name", "email", "school", "verified", "createdAt", "updatedAt"])
@@ -71,7 +131,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if canAccessUser(userId);
-      allow list: if false;
+      allow list: if isAdmin();
       
       allow create: if isVerified() 
         && isValidId(userId)
@@ -149,8 +209,7 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow get: if isAdmin()
-        || (isSignedIn() && (request.auth.uid == resource.data.sellerId || !hasBlockRelationship(request.auth.uid, resource.data.sellerId)));
+      allow get: if canAccessProduct(resource.data);
       allow list: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
       
       allow create: if isVerified() 
@@ -219,11 +278,7 @@ service cloud.firestore {
     match /chatRooms/{roomId} {
       // get: only participants can fetch a specific chat room by ID
       allow get: if canAccessRoom(resource.data);
-      // list: allow any signed-in user — the client query always filters by
-      // `where('participants', 'array-contains', user.uid)` and a composite
-      // index enforces it; we cannot use resource.data.participants here since
-      // Firestore security rules don't support per-document checks on list queries.
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
       
       allow create: if isVerified() 
         && isValidId(roomId)
@@ -231,13 +286,15 @@ service cloud.firestore {
         && isValidChatRoom(incoming())
         && !hasBlockRelationship(request.auth.uid, otherParticipant(incoming().participants));
         
-      allow update: if isSignedIn() && isValidId(roomId)
-        && canAccessRoom(existing())
-        && (incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastSenderId', 'updatedAt', 'pinnedMessageId', 'pinnedMessageText', 'unreadBy', 'status', 'requestedBy', 'mutedBy', 'pinnedBy', 'deletedBy' ])
-        || isAdmin());
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && isValidId(roomId)
+          && canAccessRoom(existing())
+          && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastSenderId', 'updatedAt', 'pinnedMessageId', 'pinnedMessageText', 'unreadBy', 'status', 'requestedBy', 'mutedBy', 'pinnedBy', 'deletedBy' ]));
 
       allow delete: if isVerified() && isValidId(roomId)
         && request.auth.uid in existing().participants
+        && canAccessRoom(existing())
         && existing().get('status', '') == 'pending';
 
       match /messages/{messageId} {
@@ -253,6 +310,7 @@ service cloud.firestore {
         allow update: if isVerified() 
           && isValidId(messageId)
           && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants
+          && canAccessRoom(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
           && (
              incoming().diff(existing()).affectedKeys().hasOnly(['deletedFor'])
              ||
@@ -266,6 +324,7 @@ service cloud.firestore {
 
         allow delete: if isVerified() 
           && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants
+          && canAccessRoom(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
           && get(/databases/$(database)/documents/chatRooms/$(roomId)).data.get('status', '') == 'pending';
       }
     }
@@ -349,26 +408,30 @@ service cloud.firestore {
 
     // === WISHLISTS ===
     match /wishlists/{wishlistId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if isSignedIn();
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
 
       allow create: if isSignedIn()
         && incoming().userId == request.auth.uid
         && incoming().productId is string
-        && incoming().productId.size() > 0;
+        && incoming().productId.size() > 0
+        && exists(productDoc(incoming().productId))
+        && canAccessProduct(get(productDoc(incoming().productId)).data);
 
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // === REVIEWS ===
     match /reviews/{reviewId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if canAccessReview(resource.data);
+      allow list: if canAccessReview(resource.data);
 
       allow create: if isSignedIn()
         && incoming().reviewerId == request.auth.uid
         && incoming().reviewerName is string
         && incoming().productId is string
+        && exists(productDoc(incoming().productId))
+        && canAccessProduct(get(productDoc(incoming().productId)).data)
         && incoming().rating is number
         && incoming().rating >= 1
         && incoming().rating <= 5
@@ -420,9 +483,8 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      // Anyone can read individual posts, but list queries must filter by status == 'approved'
-      allow get: if true;
-      allow list: if resource.data.status == 'approved' || isAdmin();
+      allow get: if canAccessPost(resource.data);
+      allow list: if canAccessPost(resource.data);
 
       allow create: if isVerified()
         && isValidId(postId)
@@ -450,6 +512,8 @@ service cloud.firestore {
         // NOTE: the `reactionsCount` and `poll` maps are still fully rewritable here
         // and need a server-side/transactional guard — see thingstofix.md 8.6 / 5.1.
         (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'repliesCount', 'reactionsCount', 'poll', 'updatedAt'])
+          && canAccessPost(existing())
+          && !hasBlockRelationship(request.auth.uid, existing().authorId)
           && (incoming().get('upvotesCount', 0) - existing().get('upvotesCount', 0)) >= -1
           && (incoming().get('upvotesCount', 0) - existing().get('upvotesCount', 0)) <= 1
           && (incoming().get('downvotesCount', 0) - existing().get('downvotesCount', 0)) >= -1
@@ -465,47 +529,58 @@ service cloud.firestore {
 
     // === POST UPVOTES ===
     match /post_upvotes/{upvoteId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerified()
+        && incoming().userId == request.auth.uid
+        && canInteractWithPost(incoming().postId);
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
     // === POST DOWNVOTES ===
     match /post_downvotes/{downvoteId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerified()
+        && incoming().userId == request.auth.uid
+        && canInteractWithPost(incoming().postId);
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 
     // === REPLY UPVOTES ===
     match /reply_upvotes/{upvoteId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().replyId is string;
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerified()
+        && incoming().userId == request.auth.uid
+        && incoming().replyId is string
+        && exists(replyDoc(incoming().replyId))
+        && canAccessReply(get(replyDoc(incoming().replyId)).data);
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/post_replies/$(resource.data.replyId)).data.authorId == request.auth.uid || isAdmin());
     }
 
     // === SAVED POSTS ===
     match /saved_posts/{saveId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn()
+        && incoming().userId == request.auth.uid
+        && canInteractWithPost(incoming().postId);
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // === POST REACTIONS (CONFESSIONS) ===
     match /post_reactions/{reactionId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isVerified() 
         && incoming().userId == request.auth.uid 
-        && incoming().postId is string
+        && canInteractWithPost(incoming().postId)
         && incoming().reaction is string
         && incoming().createdAt == request.time;
       allow update: if isVerified() 
         && resource.data.userId == request.auth.uid 
+        && canInteractWithPost(resource.data.postId)
         && incoming().diff(existing()).affectedKeys().hasOnly(['reaction', 'updatedAt'])
         && incoming().updatedAt == request.time;
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
@@ -513,21 +588,24 @@ service cloud.firestore {
 
     // === POST REPLIES ===
     match /post_replies/{replyId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if canAccessReply(resource.data);
+      allow list: if canAccessReply(resource.data);
       allow create: if isVerified() 
         && incoming().postId is string
+        && canInteractWithPost(incoming().postId)
         && incoming().authorId == request.auth.uid
         && incoming().authorName is string
         && incoming().authorSchool is string
         && incoming().content is string
         && incoming().content.size() > 0 && incoming().content.size() <= 1000
         && (!incoming().keys().hasAny(['parentId']) || (incoming().parentId == null || incoming().parentId is string))
+        && canReplyToParent(incoming())
         && (!incoming().keys().hasAny(['upvotesCount']) || (incoming().upvotesCount is number))
         && (!incoming().keys().hasAny(['repliesCount']) || (incoming().repliesCount is number))
         && incoming().createdAt == request.time;
         allow update: if isVerified() && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt'])
+          (canAccessReply(existing())
+            && incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt']))
           ||
           (resource.data.authorId == request.auth.uid
             && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'edited', 'updatedAt'])
@@ -543,8 +621,8 @@ service cloud.firestore {
 
     // === FOLLOWS ===
     match /follows/{followId} {
-      allow read: if isSignedIn();
-      allow list: if isSignedIn();
+      allow get: if canAccessFollow(resource.data);
+      allow list: if canAccessFollow(resource.data);
       
       allow create: if isVerified()
         && isValidId(followId)
@@ -553,6 +631,7 @@ service cloud.firestore {
         && incoming().followingId is string
         && incoming().followingId.size() > 0
         && incoming().followerId != incoming().followingId
+        && canInteractWithUser(incoming().followingId)
         && incoming().createdAt == request.time;
       
       allow delete: if isVerified() 
@@ -599,11 +678,18 @@ service cloud.firestore {
     }
     // === BLOCKS ===
     match /blocks/{blockId} {
-      allow get: if isSignedIn() && (resource == null || resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
-      allow list: if isSignedIn();
+      allow get: if isSignedIn()
+        && (blockId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$')
+          || blockId.matches('^[a-zA-Z0-9_\\-]+_' + request.auth.uid + '$'));
+      allow list: if isSignedIn()
+        && (resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
       allow create: if isVerified() 
+        && incoming().keys().hasOnly(['blockerId', 'blockedId', 'createdAt'])
         && incoming().blockerId == request.auth.uid
         && incoming().blockedId is string
+        && isValidId(incoming().blockedId)
+        && incoming().blockedId != request.auth.uid
+        && blockId == request.auth.uid + '_' + incoming().blockedId
         && incoming().createdAt == request.time;
       allow delete: if isVerified() && resource.data.blockerId == request.auth.uid;
     }
