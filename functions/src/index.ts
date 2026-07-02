@@ -9,6 +9,19 @@ import * as nodemailer from "nodemailer";
 admin.initializeApp();
 const db = admin.firestore();
 
+/** Allowed origins — explicit list is more reliable than `cors: CORS_ORIGINS` for error responses */
+const CORS_ORIGINS = [
+  "https://www.nextbench.in",
+  "https://nextbench.in",
+  "https://nextbench-a11ed.web.app",
+  "https://nextbench-a11ed.firebaseapp.com",
+  // Local dev
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+];
+
+
 type PublicUser = {
   id: string;
   name?: string;
@@ -281,7 +294,7 @@ async function sendOtpEmail(to: string, otp: string, emailUser: string, emailPas
 
 // ─── Cloud Function: sendAuthOtpEmail ─────────────────────────────────────────────
 export const sendAuthOtpEmail = onCall(
-  { secrets: [EMAIL_USER, EMAIL_PASS, OTP_HMAC_SECRET], invoker: "public", cors: true },
+  { secrets: [EMAIL_USER, EMAIL_PASS, OTP_HMAC_SECRET], invoker: "public", cors: CORS_ORIGINS },
   async (request) => {
     const rawEmail = (request.data?.email || "").toString().trim().toLowerCase();
 
@@ -355,7 +368,7 @@ export const sendAuthOtpEmail = onCall(
 
 // ─── Cloud Function: verifyAuthOtpEmail ──────────────────────────────────────────
 export const verifyAuthOtpEmail = onCall(
-  { secrets: [OTP_HMAC_SECRET], invoker: "public", cors: true },
+  { secrets: [OTP_HMAC_SECRET], invoker: "public", cors: CORS_ORIGINS },
   async (request) => {
     const rawEmail  = (request.data?.email  || "").toString().trim().toLowerCase();
     const rawOtp    = (request.data?.otp    || "").toString().trim();
@@ -528,7 +541,7 @@ function generateRandomCode(length: number): string {
   return result;
 }
 
-export const createInviteCode = onCall({ invoker: "public", cors: true }, async (request) => {
+export const createInviteCode = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be logged in.");
   }
@@ -569,7 +582,7 @@ export const createInviteCode = onCall({ invoker: "public", cors: true }, async 
 });
 
 // ─── Existing: submitInviteCode ──────────────────────────────────────────────────
-export const submitInviteCode = onCall({ invoker: "public", cors: true }, async (request) => {
+export const submitInviteCode = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be logged in.");
   }
@@ -1005,7 +1018,7 @@ export const sendWeeklyDigest = onSchedule(
 // ─── Email #4: Admin Broadcast ─────────────────────────────────────────────────
 
 export const broadcastEmail = onCall(
-  { secrets: [EMAIL_PASS], invoker: "public", cors: true, timeoutSeconds: 540, memory: "512MiB" },
+  { secrets: [EMAIL_PASS], invoker: "public", cors: CORS_ORIGINS, timeoutSeconds: 540, memory: "512MiB" },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Must be logged in.");
@@ -1116,7 +1129,7 @@ export const broadcastEmail = onCall(
 
 // ─── Unsubscribe Endpoint ─────────────────────────────────────────────────────
 
-export const unsubscribeFromEmails = onCall({ invoker: "public", cors: true }, async (request) => {
+export const unsubscribeFromEmails = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const { uid } = request.data as { uid: string };
   if (!uid) throw new HttpsError("invalid-argument", "uid required.");
   await db.collection("users").doc(uid).update({ emailOptOut: true });
@@ -1367,7 +1380,7 @@ async function enrichProducts(docs: admin.firestore.QueryDocumentSnapshot[]): Pr
   });
 }
 
-export const getPublicUsers = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getPublicUsers = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const requestedIds = Array.isArray(request.data?.userIds)
     ? request.data.userIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0).slice(0, 50)
@@ -1384,7 +1397,7 @@ export const getPublicUsers = onCall({ invoker: "public", cors: true }, async (r
   return { users };
 });
 
-export const getBlockedUsers = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getBlockedUsers = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const blockSnap = await db.collection("blocks")
     .where("blockerId", "==", uid)
@@ -1412,7 +1425,7 @@ export const getBlockedUsers = onCall({ invoker: "public", cors: true }, async (
   return { users };
 });
 
-export const getPublicProfile = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getPublicProfile = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const userId = typeof request.data?.userId === "string" ? request.data.userId : "";
   if (!userId) throw new HttpsError("invalid-argument", "Missing userId.");
@@ -1421,7 +1434,7 @@ export const getPublicProfile = onCall({ invoker: "public", cors: true }, async 
   return { user: publicUserFromDoc(userDoc) };
 });
 
-export const getPublicProfileContent = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getPublicProfileContent = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const userId = typeof request.data?.userId === "string" ? request.data.userId : "";
   if (!userId) throw new HttpsError("invalid-argument", "Missing userId.");
@@ -1458,7 +1471,7 @@ export const getPublicProfileContent = onCall({ invoker: "public", cors: true },
   return { user: publicUserFromDoc(userDoc), posts, products };
 });
 
-export const searchPublicUsers = onCall({ invoker: "public", cors: true }, async (request) => {
+export const searchPublicUsers = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const term = normalizeSearchTerm(request.data?.query);
   const max = Math.min(Math.max(Number(request.data?.limit) || 20, 1), 50);
@@ -1493,14 +1506,14 @@ export const searchPublicUsers = onCall({ invoker: "public", cors: true }, async
   return { users };
 });
 
-export const lookupReferralCode = onCall({ invoker: "public", cors: true }, async (request) => {
+export const lookupReferralCode = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const code = typeof request.data?.code === "string" ? request.data.code.trim().toUpperCase() : "";
   if (!code || code.length > 32) throw new HttpsError("invalid-argument", "Invalid referral code.");
   const snap = await db.collection("users").where("referralCode", "==", code).limit(1).get();
   return { userId: snap.empty ? null : snap.docs[0].id };
 });
 
-export const isReferralCodeAvailable = onCall({ invoker: "public", cors: true }, async (request) => {
+export const isReferralCodeAvailable = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   assertAuthedUid(request);
   const code = typeof request.data?.code === "string" ? request.data.code.trim().toUpperCase() : "";
   if (!code || code.length > 32) throw new HttpsError("invalid-argument", "Invalid referral code.");
@@ -1508,7 +1521,7 @@ export const isReferralCodeAvailable = onCall({ invoker: "public", cors: true },
   return { available: snap.empty };
 });
 
-export const getDiscoveryFeed = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getDiscoveryFeed = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = request.auth?.uid || null;
   const [blockedIds, friendIds] = uid ? await Promise.all([blockSetFor(uid), friendSetFor(uid)]) : [new Set<string>(), new Set<string>()];
   const postCursor = typeof request.data?.postCreatedAt === "number" ? request.data.postCreatedAt : null;
@@ -1552,7 +1565,7 @@ export const getDiscoveryFeed = onCall({ invoker: "public", cors: true }, async 
   };
 });
 
-export const searchDiscovery = onCall({ invoker: "public", cors: true }, async (request) => {
+export const searchDiscovery = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = request.auth?.uid || null;
   const term = normalizeSearchTerm(request.data?.query);
   const school = typeof request.data?.school === "string" ? request.data.school.trim() : "";
@@ -1613,7 +1626,7 @@ export const searchDiscovery = onCall({ invoker: "public", cors: true }, async (
   return { users: users.slice(0, suggestions ? 15 : 50), posts, products };
 });
 
-export const getPostReplies = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getPostReplies = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const postId = typeof request.data?.postId === "string" ? request.data.postId : "";
   if (!postId) throw new HttpsError("invalid-argument", "Missing postId.");
@@ -1647,7 +1660,7 @@ export const getPostReplies = onCall({ invoker: "public", cors: true }, async (r
   return { replies };
 });
 
-export const getProductReviews = onCall({ invoker: "public", cors: true }, async (request) => {
+export const getProductReviews = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = assertAuthedUid(request);
   const productId = typeof request.data?.productId === "string" ? request.data.productId : "";
   if (!productId) throw new HttpsError("invalid-argument", "Missing productId.");
@@ -1673,7 +1686,7 @@ export const getProductReviews = onCall({ invoker: "public", cors: true }, async
   return { reviews };
 });
 
-export const getLandingStats = onCall({ invoker: "public", cors: true }, async () => {
+export const getLandingStats = onCall({ invoker: "public", cors: CORS_ORIGINS }, async () => {
   const [usersSnap, productsSnap, schoolsSnap] = await Promise.all([
     db.collection("users").limit(1000).get(),
     db.collection("products").limit(1000).get(),
@@ -1686,7 +1699,7 @@ export const getLandingStats = onCall({ invoker: "public", cors: true }, async (
   };
 });
 
-export const deletePostCascade = onCall({ invoker: "public", cors: true, timeoutSeconds: 120 }, async (request) => {
+export const deletePostCascade = onCall({ invoker: "public", cors: CORS_ORIGINS, timeoutSeconds: 120 }, async (request) => {
   const uid = assertAuthedUid(request);
   const postId = typeof request.data?.postId === "string" ? request.data.postId : "";
   if (!postId) throw new HttpsError("invalid-argument", "Missing postId.");
@@ -1781,7 +1794,7 @@ export const rateLimitReply = onDocumentCreated(
   }
 );
 
-export const createNotification = onCall({ invoker: "public", cors: true }, async (request) => {
+export const createNotification = onCall({ invoker: "public", cors: CORS_ORIGINS }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Must be logged in.");
   const isAdminCaller = request.auth?.token?.admin === true;

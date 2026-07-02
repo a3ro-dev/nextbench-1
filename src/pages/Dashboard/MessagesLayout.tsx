@@ -112,10 +112,17 @@ export default function MessagesLayout() {
         if (uncachedUserIds.size > 0) {
           await Promise.all(
             Array.from(uncachedUserIds).map(async (userId) => {
-              const uDoc = await getDoc(doc(db, 'users', userId));
-              userCache[userId] = uDoc.exists()
-                ? { id: userId, ...uDoc.data() }
-                : { id: userId, name: 'Deleted User' };
+              try {
+                const uDoc = await getDoc(doc(db, 'users', userId));
+                userCache[userId] = uDoc.exists()
+                  ? { id: userId, ...uDoc.data() }
+                  : { id: userId, name: 'Deleted User' };
+              } catch {
+                // Permission denied — likely a blocked user.  Don't let one
+                // failed read break the entire chat list; the room will be
+                // filtered out by allBlockedIds in the loop below anyway.
+                userCache[userId] = { id: userId, name: 'User' };
+              }
             })
           );
         }
