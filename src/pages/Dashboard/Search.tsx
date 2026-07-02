@@ -79,11 +79,12 @@ export default function Search() {
         const fetchSuggestions = async () => {
           setLoading(true);
           try {
+            // Primary: Cloud Function gives personalised, block-filtered results.
             const [discovery, clubsSnap] = await Promise.all([
               searchDiscovery({ suggestions: true }),
               getDocs(query(collection(db, 'clubs'), where('type', '==', 'public'), limit(5)))
             ]);
-            
+
             const fetchedUsers = discovery.users
               .map((u: any) => {
                 let score = 0;
@@ -98,7 +99,7 @@ export default function Search() {
             const fetchedPosts = discovery.posts;
             const fetchedProducts = discovery.products;
             const fetchedClubs = clubsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-            
+
             setSuggestedUsers(fetchedUsers);
             setSuggestedPosts(fetchedPosts);
             setSuggestedProducts(fetchedProducts);
@@ -107,8 +108,43 @@ export default function Search() {
             setPosts(fetchedPosts);
             setProducts(fetchedProducts);
             setClubs(fetchedClubs);
-          } catch (err) {
-            console.error('Failed to load suggestions:', err);
+          } catch (fnErr) {
+            // Cloud Function unavailable (CORS, cold-start timeout, quota).
+            // Fall back to direct Firestore so the search page isn't empty.
+            console.warn('searchDiscovery unavailable, falling back to direct Firestore:', fnErr);
+            try {
+              const [postSnap, productSnap, clubsSnap] = await Promise.all([
+                getDocs(query(
+                  collection(db, 'posts'),
+                  where('status', '==', 'approved'),
+                  limit(20)
+                )),
+                getDocs(query(
+                  collection(db, 'products'),
+                  where('status', 'in', ['available', 'sold']),
+                  limit(10)
+                )),
+                getDocs(query(collection(db, 'clubs'), where('type', '==', 'public'), limit(5))),
+              ]);
+
+              const fallbackPosts = postSnap.docs
+                .map(d => ({ id: d.id, ...d.data() } as any))
+                .filter((p: any) => !allBlockedIds.has(p.authorId));
+              const fallbackProducts = productSnap.docs
+                .map(d => ({ id: d.id, ...d.data() } as any))
+                .filter((p: any) => !allBlockedIds.has(p.sellerId));
+              const fallbackClubs = clubsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+              setSuggestedPosts(fallbackPosts);
+              setSuggestedProducts(fallbackProducts);
+              setSuggestedClubs(fallbackClubs);
+              setPosts(fallbackPosts);
+              setProducts(fallbackProducts);
+              setClubs(fallbackClubs);
+              // Users section stays empty — can't list users directly via Firestore rules
+            } catch (err) {
+              console.error('Failed to load suggestions:', err);
+            }
           } finally {
             setLoading(false);
           }
