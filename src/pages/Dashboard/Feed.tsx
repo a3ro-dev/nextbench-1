@@ -22,6 +22,7 @@ const ImageCropper = lazy(() => import('../../components/ui/ImageCropper'));
 import ProductCard from '../../components/ui/ProductCard';
 import PostCard from '../../components/ui/PostCard';
 import PostDetailModal from '../../components/feed/PostDetailModal';
+import Stories from '../../components/stories/Stories';
 import { useScrollLock } from '../../hooks/useScrollLock';
 import { useBlockedIds, useBlockedByIds } from '../../lib/blocks';
 import { usePublicClubs, joinClub } from '../../lib/clubs';
@@ -1460,6 +1461,9 @@ export default function Feed() {
           </button>
         ))}
       </div>
+
+      {/* Stories row */}
+      <Stories />
 
       {/* Compose Bar */}
       {user && userData?.verified && (
