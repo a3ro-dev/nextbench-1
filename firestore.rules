@@ -516,8 +516,8 @@ service cloud.firestore {
     // === POSTS (COMMUNITY) ===
     function isValidPost(data) {
       return data.keys().hasAll(['title', 'content', 'type', 'school', 'authorId', 'authorName', 'status', 'createdAt', 'updatedAt'])
-        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
-        && data.content is string && data.content.size() > 0 && data.content.size() <= 5000
+        && data.title is string && data.title.size() >= 0 && data.title.size() <= 200
+        && data.content is string && data.content.size() >= 0 && data.content.size() <= 5000
         && data.type is string && data.type in ['info', 'notes', 'event', 'others', 'confession']
         && data.school is string && data.school.size() > 0
         && data.authorId is string && data.authorId.size() > 0
