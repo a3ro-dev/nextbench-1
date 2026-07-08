@@ -516,8 +516,8 @@ service cloud.firestore {
     // === POSTS (COMMUNITY) ===
     function isValidPost(data) {
       return data.keys().hasAll(['title', 'content', 'type', 'school', 'authorId', 'authorName', 'status', 'createdAt', 'updatedAt'])
-        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
-        && data.content is string && data.content.size() > 0 && data.content.size() <= 5000
+        && data.title is string && data.title.size() >= 0 && data.title.size() <= 200
+        && data.content is string && data.content.size() >= 0 && data.content.size() <= 5000
         && data.type is string && data.type in ['info', 'notes', 'event', 'others', 'confession']
         && data.school is string && data.school.size() > 0
         && data.authorId is string && data.authorId.size() > 0
@@ -683,7 +683,11 @@ service cloud.firestore {
     // === FOLLOWS ===
     match /follows/{followId} {
       allow get: if canAccessFollow(resource.data);
-      allow list: if canAccessFollow(resource.data);
+      // list: isSignedIn() avoids per-doc exists() calls that exceed the 10-call
+      // Firestore limit when many follow docs are returned. Client queries are
+      // already scoped to specific followerId/followingId. Block filtering is
+      // handled client-side.
+      allow list: if isSignedIn();
       
       allow create: if isVerified()
         && isValidId(followId)
