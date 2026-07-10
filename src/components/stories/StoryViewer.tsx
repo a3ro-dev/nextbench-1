@@ -25,12 +25,14 @@ import { advance, rewind, jumpAuthor, clampCursor, type Cursor } from '../../lib
 import StoryContent from './StoryContent';
 import StoryProgressBars from './StoryProgressBars';
 import StoryOwnerBar from './StoryOwnerBar';
+import StoryInteractionBar from './StoryInteractionBar';
 import StoryViewersSheet from './StoryViewersSheet';
 
 interface Props {
   tray: TrayEntry[];
   initialAuthorIndex: number;
   currentUid: string;
+  currentUsername: string;
   onClose: () => void;
   onSeen: (authorId: string) => void;
   onDeleted?: () => void;
@@ -48,7 +50,7 @@ function timeAgo(ms: number): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
-export default function StoryViewer({ tray, initialAuthorIndex, currentUid, onClose, onSeen, onDeleted }: Props) {
+export default function StoryViewer({ tray, initialAuthorIndex, currentUid, currentUsername, onClose, onSeen, onDeleted }: Props) {
   const navAuthors = useMemo(() => tray.map((e) => ({ storyCount: e.stories.length })), [tray]);
 
   const [cursor, setCursor] = useState<Cursor>(() =>
@@ -58,6 +60,7 @@ export default function StoryViewer({ tray, initialAuthorIndex, currentUid, onCl
   const [paused, setPaused] = useState(false);
   const [viewersOpen, setViewersOpen] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
 
   const entry = tray[cursor.authorIndex];
   const story = entry?.stories[cursor.storyIndex];
@@ -129,7 +132,8 @@ export default function StoryViewer({ tray, initialAuthorIndex, currentUid, onCl
   );
 
   // Story is effectively paused while held OR while the viewers sheet is open.
-  const effectivePaused = paused || viewersOpen;
+  // Story is effectively paused while held, viewers sheet is open, or reply input is focused.
+  const effectivePaused = paused || viewersOpen || inputFocused;
 
   // Keep latest handlers in refs for the rAF/keyboard closures.
   const pausedRef = useRef(effectivePaused);
@@ -352,6 +356,18 @@ export default function StoryViewer({ tray, initialAuthorIndex, currentUid, onCl
         {/* Owner tools (own story only) */}
         {entry.authorId === currentUid && (
           <StoryOwnerBar storyId={story.id} onOpenViewers={() => setViewersOpen(true)} onDelete={handleDelete} />
+        )}
+
+        {/* Interaction bar for viewing other people's stories */}
+        {entry.authorId !== currentUid && (
+          <StoryInteractionBar
+            storyId={story.id}
+            storyAuthorId={entry.authorId}
+            currentUid={currentUid}
+            currentUsername={currentUsername}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+          />
         )}
 
         <AnimatePresence>

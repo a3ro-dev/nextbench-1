@@ -209,6 +209,43 @@ function timeAgo(date: any): string {
   return date.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** Truncated content preview with a "more" button when text is long. */
+function ContentPreview({ text, onClick }: { text: string; onClick: () => void }) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [isClamped, setIsClamped] = useState(false);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    // Compare the rendered height to the scroll height to detect clamping
+    const check = () => setIsClamped(el.scrollHeight > el.clientHeight + 2);
+    check();
+    // Re-check on resize (font-size / container width may change)
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text]);
+
+  return (
+    <>
+      <LinkifiedText
+        ref={textRef}
+        text={text}
+        className="text-[15px] md:text-[16px] text-luxury-ink/60 leading-relaxed font-normal line-clamp-5 wrap-break-word overflow-wrap-anywhere block"
+      />
+      {isClamped && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          className="text-[14px] font-semibold text-luxury-ink/40 hover:text-brand-teal mt-1 transition-colors"
+        >
+          more
+        </button>
+      )}
+    </>
+  );
+}
+
 export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onClick, onUpvote, onDownvote, onShare, onSave }: PostCardProps) {
   const { showToast } = useToast();
 
@@ -370,10 +407,7 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
 
         {/* Content Preview */}
         <div className="mb-5">
-          <LinkifiedText
-            text={post.content}
-            className="text-[15px] md:text-[16px] text-luxury-ink/60 leading-relaxed font-normal line-clamp-5 wrap-break-word overflow-wrap-anywhere block"
-          />
+          <ContentPreview text={post.content} onClick={onClick} />
         </div>
 
         {/* Poll */}
