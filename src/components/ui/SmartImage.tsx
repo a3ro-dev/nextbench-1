@@ -96,6 +96,15 @@ export default function SmartImage({
     );
   }
 
+  const fitClasses = {
+    cover: 'object-cover',
+    contain: 'object-contain',
+    fill: 'object-fill',
+    none: 'object-none',
+    'scale-down': 'object-scale-down'
+  };
+  const fitClass = fitClasses[fit] || 'object-cover';
+
   return (
     <div
       className="relative w-full overflow-hidden bg-surface-soft select-none"
@@ -112,7 +121,7 @@ export default function SmartImage({
         srcSet={srcSet}
         sizes={srcSet ? '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw' : undefined}
         alt={alt}
-        className={`w-full h-full object-${fit} transition-opacity duration-300 ease-out ${
+        className={`w-full h-full ${fitClass} transition-opacity duration-300 ease-out ${
           isLoaded ? 'opacity-100' : 'opacity-0'
         } ${className}`}
         onLoad={() => setIsLoaded(true)}

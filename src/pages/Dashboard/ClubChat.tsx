@@ -102,18 +102,22 @@ export default function ClubChat({ panelMode, roomIdOverride, onBack }: ClubChat
     if (!confirm('Are you sure you want to clear this chat?')) return;
 
     try {
-      const batch = writeBatch(db);
       const msgsSnap = await getDocs(collection(db, 'clubs', clubId, 'messages'));
+      let batch = writeBatch(db);
       let count = 0;
-      msgsSnap.docs.forEach((docSnap) => {
+      for (const docSnap of msgsSnap.docs) {
         const data = docSnap.data();
         const deletedFor = data.deletedFor || [];
         if (!deletedFor.includes(user.uid)) {
           batch.update(docSnap.ref, { deletedFor: arrayUnion(user.uid) });
           count++;
+          if (count % 500 === 0) {
+            await batch.commit();
+            batch = writeBatch(db);
+          }
         }
-      });
-      if (count > 0) {
+      }
+      if (count % 500 !== 0) {
         await batch.commit();
       }
       showToast('Chat cleared', 'success');

@@ -8,6 +8,7 @@ import {
   addDoc,
   updateDoc,
   doc,
+  getDoc,
   serverTimestamp,
   arrayUnion,
   writeBatch,
@@ -175,12 +176,25 @@ export function useChatEngine({
           } else if (collectionPath === 'clubs') {
             // For clubs, unreadBy holds all other members
             try {
-              const clubDoc = doc(db, 'clubs', roomId);
-              // Wait, the page adapter is better suited to load club members and arrayUnion them,
-              // but we can query them from the club doc or let it be handled in updates.
-              // Let's pass the recipientId array or handle it inside the page adapter.
+              const clubSnap = await getDoc(doc(db, 'clubs', roomId));
+              if (clubSnap.exists()) {
+                const clubData = clubSnap.data();
+                const members = new Set<string>();
+                if (clubData.leadId) members.add(clubData.leadId);
+                if (Array.isArray(clubData.coLeadIds)) {
+                  clubData.coLeadIds.forEach((id: string) => members.add(id));
+                }
+                if (Array.isArray(clubData.memberIds)) {
+                  clubData.memberIds.forEach((id: string) => members.add(id));
+                }
+                // Remove self
+                members.delete(user.uid);
+                if (members.size > 0) {
+                  updateData.unreadBy = arrayUnion(...Array.from(members));
+                }
+              }
             } catch (err) {
-              console.warn('Failed to arrayUnion unreadBy club members:', err);
+              console.warn('Failed to get club members for unreadBy:', err);
             }
           }
 

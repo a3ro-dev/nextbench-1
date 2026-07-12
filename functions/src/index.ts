@@ -2505,10 +2505,12 @@ export const computeDerived = onSchedule(
     ]);
     const schools = new Set<string>();
     usersSnap.forEach((docSnap) => { const school = docSnap.get("school"); if (typeof school === "string" && school) schools.add(school); });
-    const batch = db.batch();
+    let batch = db.batch();
+    let opCount = 0;
     const now = admin.firestore.FieldValue.serverTimestamp();
     const landingStats = { totalUsers: usersSnap.size, totalProducts: productsSnap.size, totalSchools: schools.size, updatedAt: now };
     batch.set(db.collection("computed").doc("landing_stats"), landingStats);
+    opCount++;
     
     for (const school of schools) {
       const rankedPosts = postsSnap.docs
@@ -2643,9 +2645,19 @@ export const computeDerived = onSchedule(
       });
 
       batch.set(db.collection("computed").doc(`feed_pool_${schoolKey}`), { school, items: [...postsPool, ...productsPool].sort((a, b) => b.score - a.score).slice(0, 200), updatedAt: now });
+      opCount++;
       batch.set(db.collection("computed").doc(`trending_${schoolKey}`), { school, items: trending, badges: Object.fromEntries(trending.map((item) => [item.id, item.badge])), badgesState: newBadgesState, updatedAt: now });
+      opCount++;
+
+      if (opCount >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
     }
-    await batch.commit();
+    if (opCount > 0) {
+      await batch.commit();
+    }
     console.log("computeDerived finished");
   },
 );
