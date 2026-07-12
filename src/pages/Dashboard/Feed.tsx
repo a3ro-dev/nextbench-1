@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { useToast } from '../../lib/ToastContext';
 import SEO from '../../components/seo/SEO';
 import { handleFirestoreError, OperationType } from '../../lib/firestore-errors';
-import { uploadPostImage, uploadPostPdf, uploadPostVideo, extractVideoThumbnail, uploadVideoThumbnail } from '../../lib/storage';
+import { uploadPostImageDetailed, uploadPostPdf, uploadPostVideo } from '../../lib/storage';
 import { getOptimizedImageUrl } from '../../lib/utils';
 import { useFollowingIds } from '../../lib/follows';
 import { isTextSafe } from '../../lib/moderation';
@@ -29,6 +29,7 @@ import { usePublicClubs, joinClub } from '../../lib/clubs';
 import { savePost, unsavePost } from '../../lib/saves';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { deletePostCascade, getDiscoveryFeed } from '../../lib/discovery';
+import { PostCardSkeleton } from '../../components/ui/skeleton/Skeleton';
 
 // Minimal spinner used as Suspense fallback for lazy components
 const LazyFallback = () => (
@@ -95,38 +96,6 @@ export const POST_TYPES = [
   { id: 'confession', label: 'Anonymous Post' },
   { id: 'others', label: 'Others' },
 ];
-
-// ─── Post Card Skeleton ────────────────────────────────────
-// Memoized: it takes no props, so it never needs to re-render once mounted.
-const PostCardSkeleton = React.memo(function PostCardSkeleton() {
-  return (
-    <div className="p-5 sm:p-6 md:p-8 flex flex-col w-full border-b animate-pulse" style={{ borderColor: 'var(--color-border)' }}>
-      {/* Avatar + meta row */}
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-9 h-9 rounded-full bg-luxury-ink/8 shrink-0" />
-        <div className="flex gap-2 flex-1">
-          <div className="h-3 w-28 rounded-full bg-luxury-ink/8" />
-          <div className="h-3 w-10 rounded-full bg-luxury-ink/6" />
-        </div>
-        <div className="h-5 w-16 rounded-full bg-luxury-ink/6" />
-      </div>
-      {/* Title (serif — taller) */}
-      <div className="h-6 w-3/4 rounded-lg bg-luxury-ink/10 mb-3" />
-      {/* Content lines */}
-      <div className="space-y-2.5 mb-6">
-        <div className="h-3.5 w-full rounded-full bg-luxury-ink/7" />
-        <div className="h-3.5 w-11/12 rounded-full bg-luxury-ink/7" />
-        <div className="h-3.5 w-4/6 rounded-full bg-luxury-ink/6" />
-      </div>
-      {/* Action bar */}
-      <div className="flex items-center gap-5 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="h-8 w-12 rounded-full bg-luxury-ink/8" />
-        <div className="h-8 w-12 rounded-full bg-luxury-ink/8" />
-        <div className="h-8 w-10 rounded-full bg-luxury-ink/8" />
-      </div>
-    </div>
-  );
-});
 
 // ─── Infinite Scroll Sentinel ──────────────────────────────
 function InfiniteScrollSentinel({ onVisible }: { onVisible: () => void }) {
@@ -228,6 +197,8 @@ function interactionReducer(state: InteractionState, action: InteractionAction):
 interface UploadProgress { pct: number; loaded: number; total: number; }
 interface PreUploadedPdf { url: string; pages: number; }
 
+interface ImageDetailed { url: string; w: number; h: number; }
+
 interface UploadState {
   imageFiles: File[];
   pendingFiles: File[];
@@ -237,6 +208,7 @@ interface UploadState {
   isPreUploading: boolean;
   preUploadLabel: string;
   preUploadedImageUrls: string[];
+  preUploadedImagesDetailed: ImageDetailed[];
   preUploadedVideoUrl: string | null;
   preUploadedVideoThumbnail: string | null;
   preUploadedPdfData: PreUploadedPdf | null;
@@ -251,6 +223,7 @@ const initialUploadState: UploadState = {
   isPreUploading: false,
   preUploadLabel: '',
   preUploadedImageUrls: [],
+  preUploadedImagesDetailed: [],
   preUploadedVideoUrl: null,
   preUploadedVideoThumbnail: null,
   preUploadedPdfData: null,
@@ -296,7 +269,7 @@ export default function Feed() {
   // Thin same-named adapters keep every existing call site untouched while all
   // state lives in one reducer.
   const [uploadState, dispatchUpload] = useReducer(uploadReducer, initialUploadState);
-  const { imageFiles, pendingFiles, cropImageSrc, currentCropIndex, uploadProgress, isPreUploading, preUploadLabel, preUploadedImageUrls, preUploadedVideoUrl, preUploadedVideoThumbnail, preUploadedPdfData } = uploadState;
+  const { imageFiles, pendingFiles, cropImageSrc, currentCropIndex, uploadProgress, isPreUploading, preUploadLabel, preUploadedImageUrls, preUploadedImagesDetailed, preUploadedVideoUrl, preUploadedVideoThumbnail, preUploadedPdfData } = uploadState;
   const patchUpload = (patch: Partial<UploadState>) => dispatchUpload({ type: 'PATCH', patch });
   const setImageFiles = (v: File[] | ((prev: File[]) => File[])) =>
     typeof v === 'function'
@@ -309,6 +282,7 @@ export default function Feed() {
   const setIsPreUploading = (v: boolean) => patchUpload({ isPreUploading: v });
   const setPreUploadLabel = (v: string) => patchUpload({ preUploadLabel: v });
   const setPreUploadedImageUrls = (v: string[]) => patchUpload({ preUploadedImageUrls: v });
+  const setPreUploadedImagesDetailed = (v: ImageDetailed[]) => patchUpload({ preUploadedImagesDetailed: v });
   const setPreUploadedVideoUrl = (v: string | null) => patchUpload({ preUploadedVideoUrl: v });
   const setPreUploadedVideoThumbnail = (v: string | null) => patchUpload({ preUploadedVideoThumbnail: v });
   const setPreUploadedPdfData = (v: PreUploadedPdf | null) => patchUpload({ preUploadedPdfData: v });
@@ -550,7 +524,7 @@ export default function Feed() {
   }, [pdfFile]);
 
   useEffect(() => {
-    if (!imageFiles.length) { setPreUploadedImageUrls([]); return; }
+    if (!imageFiles.length) { setPreUploadedImageUrls([]); setPreUploadedImagesDetailed([]); return; }
     let cancelled = false;
     setIsPreUploading(true);
     setPreUploadLabel('Uploading images...');
@@ -559,17 +533,21 @@ export default function Feed() {
     setUploadProgress({ pct: 0, loaded: 0, total: totalSize });
     Promise.all(
       imageFiles.map(async (file) => {
-        const url = await uploadPostImage(file, (pct, loaded) => {
+        const res = await uploadPostImageDetailed(file, (pct, loaded) => {
           if (!cancelled) {
             const baseLoaded = uploadedSize;
             setUploadProgress({ pct: Math.round((baseLoaded + loaded) / totalSize * 100), loaded: baseLoaded + loaded, total: totalSize });
           }
         });
         uploadedSize += file.size;
-        return url;
+        return res;
       })
-    ).then(urls => {
-      if (!cancelled) { setPreUploadedImageUrls(urls); setUploadProgress(null); }
+    ).then(results => {
+      if (!cancelled) {
+        setPreUploadedImageUrls(results.map(r => r.url));
+        setPreUploadedImagesDetailed(results.map(r => ({ url: r.url, w: r.width, h: r.height })));
+        setUploadProgress(null);
+      }
     }).catch(err => {
       console.error('Image pre-upload failed:', err);
       if (!cancelled) setUploadProgress(null);
@@ -850,6 +828,7 @@ export default function Feed() {
 
     try {
       let imageUrls: string[] = [];
+      let imagesDetailed: ImageDetailed[] = [];
       let pdfUrl: string | undefined = undefined;
       let pdfPages: number = 0;
       let videoUrl: string | undefined = undefined;
@@ -882,23 +861,26 @@ export default function Feed() {
           pdfPages = pdfResult.pages;
         }
       } else if (imageFiles.length > 0) {
-        if (preUploadedImageUrls.length === imageFiles.length) {
+        if (preUploadedImageUrls.length === imageFiles.length && preUploadedImagesDetailed.length === imageFiles.length) {
           imageUrls = preUploadedImageUrls;
+          imagesDetailed = preUploadedImagesDetailed;
         } else {
           setSubmittingStatus('Uploading images...');
           const totalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
           let uploadedSize = 0;
-          imageUrls = await Promise.all(
+          const results = await Promise.all(
             imageFiles.map(async (file) => {
               setUploadProgress({ pct: Math.round((uploadedSize / totalSize) * 100), loaded: uploadedSize, total: totalSize });
-              const url = await uploadPostImage(file, (pct, loaded) => {
+              const res = await uploadPostImageDetailed(file, (pct, loaded) => {
                 const baseLoaded = uploadedSize;
                 setUploadProgress({ pct: Math.round((baseLoaded + loaded) / totalSize * 100), loaded: baseLoaded + loaded, total: totalSize });
               });
               uploadedSize += file.size;
-              return url;
+              return res;
             })
           );
+          imageUrls = results.map(r => r.url);
+          imagesDetailed = results.map(r => ({ url: r.url, w: r.width, h: r.height }));
           setUploadProgress(null);
         }
       }
@@ -938,6 +920,9 @@ export default function Feed() {
         status: initialStatus,
         privacy,
         imageUrls,
+        imageWidth: imagesDetailed[0]?.w || null,
+        imageHeight: imagesDetailed[0]?.h || null,
+        imagesDetailed,
         ...(pdfUrl ? { pdfUrl, pdfPages } : {}),
         ...(videoUrl ? { videoUrl } : {}),
         upvotesCount: 0,
@@ -2082,7 +2067,7 @@ export default function Feed() {
             imageSrc={cropImageSrc}
             onCropComplete={handleCropComplete}
             onCancel={handleCropCancel}
-            aspect={1}
+            aspect={0}
           />
         </Suspense>
       )}

@@ -16,6 +16,7 @@ import ShareModal from '../../components/ui/ShareModal';
 import { useBlockStatus } from '../../lib/blocks';
 import { getOrCreateDMRoom } from '../../lib/dm';
 import { getProductReviews } from '../../lib/discovery';
+import { ProductDetailSkeleton } from '../../components/ui/skeleton/Skeleton';
 
 interface ProductData {
   id: string;
@@ -260,7 +261,7 @@ export default function ProductDetail() {
     finally { setSubmittingReview(false); }
   };
 
-  if (loading) return <div className="pt-32 text-center text-xs font-bold uppercase tracking-widest text-brand-teal/40">Loading Item...</div>;
+  if (loading) return <div className="pt-32"><ProductDetailSkeleton /></div>;
 
   if (!product || iBlockedSeller || sellerBlockedMe) {
     return (

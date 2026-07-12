@@ -7,7 +7,8 @@ const PdfViewer = lazy(() => import('./PdfViewer'));
 const PdfPreview = lazy(() => import('./PdfViewer').then(m => ({ default: m.PdfPreview })));
 const VideoPlayer = lazy(() => import('./VideoPlayer'));
 import { motion, AnimatePresence } from 'motion/react';
-import { getOptimizedImageUrl } from '../../lib/utils';
+import Avatar from './Avatar';
+import SmartImage from './SmartImage';
 import { POST_TYPES } from '../../pages/Dashboard/Feed';
 import { getPersonaDisplay } from '../../lib/confessions';
 import ReportModal from './ReportModal';
@@ -129,11 +130,11 @@ function LikedByModal({ postId, count, onClose }: { postId: string; count: numbe
                       navigate(liker.username ? `/u/${liker.username}` : `/profile/${liker.uid}`);
                     }}
                   >
-                    <div className="w-9 h-9 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal font-bold text-sm overflow-hidden shrink-0">
-                      {liker.profilePicture ? (
-                        <img src={getOptimizedImageUrl(liker.profilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
-                      ) : liker.name[0]?.toUpperCase()}
-                    </div>
+                    <Avatar
+                      src={liker.profilePicture}
+                      name={liker.name}
+                      size={36}
+                    />
                     <div className="min-w-0">
                       <p className="text-[14px] font-semibold text-luxury-ink truncate">{liker.name}</p>
                       {liker.username && (
@@ -168,6 +169,9 @@ interface Post {
   status: string;
   imageUrl?: string;
   imageUrls?: string[];
+  imageWidth?: number;
+  imageHeight?: number;
+  imagesDetailed?: { url: string; w: number; h: number; }[];
   pdfUrl?: string;
   pdfPages?: number;
   upvotesCount: number;
@@ -382,12 +386,18 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         <div className="mb-3" onClick={handleProfileClick}>
           <div className="flex items-center gap-2 min-w-0">
             {/* Avatar */}
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold overflow-hidden shrink-0 ring-1 ring-inset ring-luxury-ink/[0.06] ${displayInfo.isAnonymous ? 'bg-purple-500/10 text-purple-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
-              {!displayInfo.isAnonymous && liveProfilePicture ? (
-                <img src={getOptimizedImageUrl(liveProfilePicture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
-
-              ) : displayInfo.name[0]?.toUpperCase()}
-            </div>
+            {displayInfo.isAnonymous ? (
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold overflow-hidden shrink-0 ring-1 ring-inset ring-luxury-ink/[0.06] bg-purple-500/10 text-purple-600">
+                {displayInfo.name[0]?.toUpperCase()}
+              </div>
+            ) : (
+              <Avatar
+                src={liveProfilePicture}
+                name={displayInfo.name}
+                size={36}
+                className="ring-1 ring-inset ring-luxury-ink/[0.06]"
+              />
+            )}
             
             <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
               <span className="text-[13px] sm:text-[14px] font-semibold text-luxury-ink hover:underline cursor-pointer truncate max-w-[7.5rem] sm:max-w-[11rem]">{displayInfo.name}</span>
@@ -431,13 +441,15 @@ export default function PostCard({ post, hasUpvoted, hasDownvoted, hasSaved, onC
         {hasImage && (
           <div className="relative mt-2 mb-6 w-full rounded-[20px] overflow-hidden group bg-black/5">
             {/* Single visible image — no scroll container */}
-            <img
-              src={getOptimizedImageUrl(postImageUrls[currentImageIndex])}
+            <SmartImage
+              src={postImageUrls[currentImageIndex]}
               alt={post.title || "Post image"}
-              className="w-full h-auto pointer-events-none"
-              referrerPolicy="no-referrer"
+              w={post.imageWidth}
+              h={post.imageHeight}
+              ratio={post.imageWidth && post.imageHeight ? undefined : 4/3}
+              fit="cover"
+              className="pointer-events-none"
               draggable={false}
-              loading="lazy"
             />
 
 

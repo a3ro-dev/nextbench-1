@@ -23,6 +23,7 @@ import SEO from '../../components/seo/SEO';
 import { PdfPreview } from '../../components/ui/PdfViewer';
 import VideoPlayer from '../../components/ui/VideoPlayer';
 import { createInviteCode, deletePostCascade, getPublicProfileContent, getPublicUsers } from '../../lib/discovery';
+import { ProfileSkeleton } from '../../components/ui/skeleton/Skeleton';
 
 
 interface UserProduct {
@@ -748,7 +749,7 @@ export default function Profile({ usernameResolvedUserId }: ProfileProps) {
     );
   }
 
-  if (!user || !profileUser) return <div className="pt-32 text-center text-xs font-bold uppercase tracking-widest text-luxury-ink/30">Loading profile...</div>;
+  if (!user || !profileUser) return <div className="pt-32"><ProfileSkeleton /></div>;
 
   const userName = (profileUser.name && typeof profileUser.name === 'string') ? profileUser.name : 'Unknown User';
   const nameParts = userName.split(' ');

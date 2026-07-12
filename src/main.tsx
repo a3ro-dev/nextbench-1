@@ -7,6 +7,14 @@ import { ToastProvider } from './lib/ToastContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { VideoPrefsProvider } from './lib/VideoPrefsContext';
 import { HelmetProvider } from 'react-helmet-async';
+import '@fontsource/inter/300.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/playfair-display/400.css';
+import '@fontsource/playfair-display/400-italic.css';
+import '@fontsource/playfair-display/700.css';
 import './index.css';
 
 const root = createRoot(document.getElementById('root')!);
